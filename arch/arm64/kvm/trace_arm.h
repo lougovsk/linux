@@ -4,6 +4,7 @@
 
 #include <kvm/arm_arch_timer.h>
 #include <linux/tracepoint.h>
+#include <asm/kvm_emulate.h>
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM kvm
@@ -30,6 +31,23 @@ TRACE_EVENT(kvm_entry,
 	TP_printk("PC: 0x%016lx", __entry->vcpu_pc)
 );
 
+TRACE_EVENT(kvm_entry_v2,
+	TP_PROTO(struct kvm_vcpu *vcpu),
+	TP_ARGS(vcpu),
+
+	TP_STRUCT__entry(
+		__field(	unsigned int,	vcpu_id		)
+		__field(	unsigned long,	vcpu_pc		)
+	),
+
+	TP_fast_assign(
+		__entry->vcpu_id		= vcpu->vcpu_id;
+		__entry->vcpu_pc		= *vcpu_pc(vcpu);
+	),
+
+	TP_printk("vcpu: %u PC: 0x%016lx", __entry->vcpu_id, __entry->vcpu_pc)
+);
+
 DECLARE_TRACE(kvm_exit_tp,
 	TP_PROTO(int ret, struct kvm_vcpu *vcpu),
 	TP_ARGS(ret, vcpu));
@@ -52,6 +70,33 @@ TRACE_EVENT(kvm_exit,
 
 	TP_printk("%s: HSR_EC: 0x%04x (%s), PC: 0x%016lx",
 		  __print_symbolic(__entry->ret, kvm_arm_exception_type),
+		  __entry->esr_ec,
+		  __print_symbolic(__entry->esr_ec, kvm_arm_exception_class),
+		  __entry->vcpu_pc)
+);
+
+TRACE_EVENT(kvm_exit_v2,
+	TP_PROTO(int ret, struct kvm_vcpu *vcpu),
+	TP_ARGS(ret, vcpu),
+
+	TP_STRUCT__entry(
+		__field(	unsigned int,	vcpu_id		)
+		__field(	int,		ret		)
+		__field(	unsigned int,	esr_ec		)
+		__field(	unsigned long,	vcpu_pc		)
+	),
+
+	TP_fast_assign(
+		__entry->vcpu_id		= vcpu->vcpu_id;
+		__entry->ret			= ARM_EXCEPTION_CODE(ret);
+		__entry->esr_ec			= ARM_EXCEPTION_IS_TRAP(ret) ?
+						  kvm_vcpu_trap_get_class(vcpu): 0;
+		__entry->vcpu_pc		= *vcpu_pc(vcpu);
+	),
+
+	TP_printk("%s: vcpu: %u HSR_EC: 0x%04x (%s), PC: 0x%016lx",
+		  __print_symbolic(__entry->ret, kvm_arm_exception_type),
+		  __entry->vcpu_id,
 		  __entry->esr_ec,
 		  __print_symbolic(__entry->esr_ec, kvm_arm_exception_class),
 		  __entry->vcpu_pc)

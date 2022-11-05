@@ -10,6 +10,9 @@ static void kvm_entry_tp(void *data, struct kvm_vcpu *vcpu)
 {
 	if (trace_kvm_entry_enabled())
 		trace_kvm_entry(*vcpu_pc(vcpu));
+
+	if (trace_kvm_entry_v2_enabled())
+		trace_kvm_entry_v2(vcpu);
 }
 
 static void kvm_exit_tp(void *data, int ret, struct kvm_vcpu *vcpu)
@@ -17,6 +20,9 @@ static void kvm_exit_tp(void *data, int ret, struct kvm_vcpu *vcpu)
 	if (trace_kvm_exit_enabled())
 		trace_kvm_exit(ret, kvm_vcpu_trap_get_class(vcpu),
 			       *vcpu_pc(vcpu));
+
+	if (trace_kvm_exit_v2_enabled())
+		trace_kvm_exit_v2(ret, vcpu);
 }
 
 static int __init kvm_tp_init(void)
