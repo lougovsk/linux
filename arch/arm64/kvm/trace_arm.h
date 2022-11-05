@@ -11,6 +11,10 @@
 /*
  * Tracepoints for entry/exit to guest
  */
+DECLARE_TRACE(kvm_entry_tp,
+	TP_PROTO(struct kvm_vcpu *vcpu),
+	TP_ARGS(vcpu));
+
 TRACE_EVENT(kvm_entry,
 	TP_PROTO(unsigned long vcpu_pc),
 	TP_ARGS(vcpu_pc),
@@ -25,6 +29,10 @@ TRACE_EVENT(kvm_entry,
 
 	TP_printk("PC: 0x%016lx", __entry->vcpu_pc)
 );
+
+DECLARE_TRACE(kvm_exit_tp,
+	TP_PROTO(int ret, struct kvm_vcpu *vcpu),
+	TP_ARGS(ret, vcpu));
 
 TRACE_EVENT(kvm_exit,
 	TP_PROTO(int ret, unsigned int esr_ec, unsigned long vcpu_pc),
