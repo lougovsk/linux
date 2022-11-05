@@ -3,6 +3,7 @@
 #include <memory.h>
 #include "../../../util/evsel.h"
 #include "../../../util/kvm-stat.h"
+#include "../../../util/tracepoint.h"
 #include "arm64_exception_types.h"
 #include "debug.h"
 
@@ -10,17 +11,27 @@ define_exit_reasons_table(arm64_exit_reasons, kvm_arm_exception_type);
 define_exit_reasons_table(arm64_trap_exit_reasons, kvm_arm_exception_class);
 
 const char *kvm_trap_exit_reason = "esr_ec";
-const char *vcpu_id_str = "id";
+const char *vcpu_id_str = "vcpu_id";
 const int decode_str_len = 20;
 const char *kvm_exit_reason = "ret";
-const char *kvm_entry_trace = "kvm:kvm_entry";
-const char *kvm_exit_trace = "kvm:kvm_exit";
+const char *kvm_entry_trace;
+const char *kvm_exit_trace;
 
-const char *kvm_events_tp[] = {
+#define NR_TPS	2
+
+static const char *kvm_events_tp_v1[NR_TPS + 1] = {
 	"kvm:kvm_entry",
 	"kvm:kvm_exit",
 	NULL,
 };
+
+static const char *kvm_events_tp_v2[NR_TPS + 1] = {
+	"kvm:kvm_entry_v2",
+	"kvm:kvm_exit_v2",
+	NULL,
+};
+
+const char *kvm_events_tp[NR_TPS + 1];
 
 static void event_get_key(struct evsel *evsel,
 			  struct perf_sample *sample,
@@ -78,8 +89,41 @@ const char * const kvm_skip_events[] = {
 	NULL,
 };
 
-int cpu_isa_init(struct perf_kvm_stat *kvm, const char *cpuid __maybe_unused)
+static int arm64__setup_kvm_tp(struct perf_kvm_stat *kvm)
 {
+	const char **kvm_events, **events_ptr;
+	int i, nr_tp = 0;
+
+	if (is_valid_tracepoint("kvm:kvm_entry_v2")) {
+		kvm_events = kvm_events_tp_v2;
+		kvm_entry_trace = "kvm:kvm_entry_v2";
+		kvm_exit_trace = "kvm:kvm_exit_v2";
+	} else {
+		kvm_events = kvm_events_tp_v1;
+		kvm_entry_trace = "kvm:kvm_entry";
+		kvm_exit_trace = "kvm:kvm_exit";
+	}
+
+	for (events_ptr = kvm_events; *events_ptr; events_ptr++) {
+		if (!is_valid_tracepoint(*events_ptr))
+			return -1;
+		nr_tp++;
+	}
+
+	for (i = 0; i < nr_tp; i++)
+		kvm_events_tp[i] = kvm_events[i];
+	kvm_events_tp[i] = NULL;
+
 	kvm->exit_reasons_isa = "arm64";
 	return 0;
+}
+
+int setup_kvm_events_tp(struct perf_kvm_stat *kvm)
+{
+	return arm64__setup_kvm_tp(kvm);
+}
+
+int cpu_isa_init(struct perf_kvm_stat *kvm, const char *cpuid __maybe_unused)
+{
+	return arm64__setup_kvm_tp(kvm);
 }
