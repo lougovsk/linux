@@ -479,7 +479,7 @@ void kvm_unshare_hyp(void *from, void *to)
  * @prot:	The protection to be applied to this range
  *
  * The same virtual address as the kernel virtual address is also used
- * in Hyp-mode mapping (modulo HYP_PAGE_OFFSET) to the same underlying
+ * in Hyp-mode mapping (modulo a random offset) to the same underlying
  * physical pages.
  */
 int create_hyp_mappings(void *from, void *to, enum kvm_pgtable_prot prot)
