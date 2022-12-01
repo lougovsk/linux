@@ -61,6 +61,12 @@ static __always_inline bool vcpu_el1_is_32bit(struct kvm_vcpu *vcpu)
 }
 #endif
 
+static inline bool vcpu_cache_overridden(struct kvm_vcpu *vcpu)
+{
+	return cpus_have_const_cap(ARM64_MISMATCHED_CACHE_TYPE) ||
+	       vcpu_el1_is_32bit(vcpu);
+}
+
 static inline void vcpu_reset_hcr(struct kvm_vcpu *vcpu)
 {
 	vcpu->arch.hcr_el2 = HCR_GUEST_FLAGS;
@@ -88,8 +94,7 @@ static inline void vcpu_reset_hcr(struct kvm_vcpu *vcpu)
 	if (vcpu_el1_is_32bit(vcpu))
 		vcpu->arch.hcr_el2 &= ~HCR_RW;
 
-	if (cpus_have_const_cap(ARM64_MISMATCHED_CACHE_TYPE) ||
-	    vcpu_el1_is_32bit(vcpu))
+	if (vcpu_cache_overridden(vcpu))
 		vcpu->arch.hcr_el2 |= HCR_TID2;
 
 	if (kvm_has_mte(vcpu->kvm))
