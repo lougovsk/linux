@@ -41,6 +41,7 @@ struct cpuinfo_arm64 {
 	struct cpu	cpu;
 	struct kobject	kobj;
 	u64		reg_ctr;
+	struct ccsidr	reg_ccsidr[MAX_CACHE_LEVEL + 1];
 	u64		reg_cntfrq;
 	u64		reg_dczid;
 	u64		reg_midr;

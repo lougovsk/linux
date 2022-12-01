@@ -8,6 +8,8 @@
 #include <linux/arm-smccc.h>
 #include <linux/types.h>
 #include <linux/cpu.h>
+#include <linux/cacheinfo.h>
+#include <asm/cache.h>
 #include <asm/cpu.h>
 #include <asm/cputype.h>
 #include <asm/cpufeature.h>
@@ -85,6 +87,50 @@ has_mismatched_cache_type(const struct arm64_cpu_capabilities *entry,
 	ctr_real = read_cpuid_effective_cachetype() & mask;
 
 	return (ctr_real != sys) && (ctr_raw != sys);
+}
+
+static bool
+has_mismatched_cache_associativity(const struct arm64_cpu_capabilities *entry,
+				   int scope)
+{
+	u64 mask = CCSIDR_ASSOCIATIVITY_BITS_MASK;
+	u64 real;
+	bool mismatched = false;
+	enum cache_type cache_type;
+	unsigned int i;
+
+	WARN_ON(scope != SCOPE_LOCAL_CPU || preemptible());
+
+	local_irq_disable();
+
+	for (i = 0; i <= MAX_CACHE_LEVEL; i++) {
+		cache_type = get_cache_type(i);
+
+		if ((cache_type & (CACHE_TYPE_DATA | CACHE_TYPE_UNIFIED))) {
+			write_sysreg(i << CSSELR_LEVEL_SHIFT, csselr_el1);
+			isb();
+			real = read_sysreg(ccsidr_el1);
+			if ((ccsidr[i].data & mask) != (real & mask)) {
+				mismatched = true;
+				break;
+			}
+		}
+
+		if ((cache_type & CACHE_TYPE_INST)) {
+			write_sysreg((i << CSSELR_LEVEL_SHIFT) | CSSELR_IN,
+				     csselr_el1);
+			isb();
+			real = read_sysreg(ccsidr_el1);
+			if ((ccsidr[i].inst & mask) != (real & mask)) {
+				mismatched = true;
+				break;
+			}
+		}
+	}
+
+	local_irq_enable();
+
+	return mismatched;
 }
 
 static void
@@ -499,6 +545,12 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		ERRATA_MIDR_RANGE_LIST(cavium_erratum_30115_cpus),
 	},
 #endif
+	{
+		.desc = "Mismatched cache associativity",
+		.capability = ARM64_MISMATCHED_CACHE_ASSOCIATIVITY,
+		.matches = has_mismatched_cache_associativity,
+		.type = ARM64_CPUCAP_LOCAL_CPU_ERRATUM,
+	},
 	{
 		.desc = "Mismatched cache type (CTR_EL0)",
 		.capability = ARM64_MISMATCHED_CACHE_TYPE,

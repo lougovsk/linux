@@ -13,6 +13,7 @@
 
 #include <linux/bitops.h>
 #include <linux/bug.h>
+#include <linux/cacheinfo.h>
 #include <linux/compat.h>
 #include <linux/elf.h>
 #include <linux/init.h>
@@ -45,6 +46,34 @@ static inline const char *icache_policy_str(int l1ip)
 	default:
 		return "RESERVED/UNKNOWN";
 	}
+}
+
+static void read_ccsidr(struct ccsidr *ccsidr)
+{
+	enum cache_type cache_type;
+	unsigned int i;
+
+	local_irq_disable();
+
+	for (i = 0; i <= MAX_CACHE_LEVEL; i++) {
+		cache_type = get_cache_type(i);
+
+		if ((cache_type & (CACHE_TYPE_DATA | CACHE_TYPE_UNIFIED))) {
+			write_sysreg(i << CSSELR_LEVEL_SHIFT, csselr_el1);
+			isb();
+			ccsidr[i].data = read_sysreg(ccsidr_el1);
+			break;
+		}
+
+		if ((cache_type & CACHE_TYPE_INST)) {
+			write_sysreg((i << CSSELR_LEVEL_SHIFT) | CSSELR_IN,
+				     csselr_el1);
+			isb();
+			ccsidr[i].inst = read_sysreg(ccsidr_el1);
+		}
+	}
+
+	local_irq_enable();
 }
 
 unsigned long __icache_flags;
@@ -443,6 +472,7 @@ static void __cpuinfo_store_cpu(struct cpuinfo_arm64 *info)
 	if (id_aa64pfr0_32bit_el0(info->reg_id_aa64pfr0))
 		__cpuinfo_store_cpu_32bit(&info->aarch32);
 
+	read_ccsidr(info->reg_ccsidr);
 	cpuinfo_detect_icache_policy(info);
 }
 

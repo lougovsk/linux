@@ -72,6 +72,8 @@ static inline u32 cache_type_cwg(void)
 
 #define __read_mostly __section(".data..read_mostly")
 
+#define MAX_CACHE_LEVEL	7	/* Max 7 level supported */
+
 static inline int cache_line_size_of_cpu(void)
 {
 	u32 cwg = cache_type_cwg();
@@ -80,6 +82,7 @@ static inline int cache_line_size_of_cpu(void)
 }
 
 int cache_line_size(void);
+enum cache_type get_cache_type(int level);
 
 /*
  * Read the effective value of CTR_EL0.

@@ -807,6 +807,13 @@
 #define HFGxTR_EL2_nSMPRI_EL1_SHIFT	54
 #define HFGxTR_EL2_nSMPRI_EL1_MASK	BIT_MASK(HFGxTR_EL2_nSMPRI_EL1_SHIFT)
 
+/* CCSIDR_EL1 bit definitions */
+#define CCSIDR_ASSOCIATIVITY_BITS_MASK	GENMASK(27, 3)
+
+/* CSSELR_EL1 */
+#define CSSELR_IN		1
+#define CSSELR_LEVEL_SHIFT	1
+
 #define ARM64_FEATURE_FIELD_BITS	4
 
 /* Create a mask for the feature bits of the specified feature. */

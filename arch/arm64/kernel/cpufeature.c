@@ -932,6 +932,8 @@ static void init_cpu_ftr_reg(u32 sys_reg, u64 new)
 	reg->user_mask = user_mask;
 }
 
+struct ccsidr ccsidr[MAX_CACHE_LEVEL + 1];
+
 extern const struct arm64_cpu_capabilities arm64_errata[];
 static const struct arm64_cpu_capabilities arm64_features[];
 
@@ -1041,6 +1043,8 @@ void __init init_cpu_features(struct cpuinfo_arm64 *info)
 	 * after we have initialised the CPU feature infrastructure.
 	 */
 	setup_boot_cpu_capabilities();
+
+	memcpy(ccsidr, info->reg_ccsidr, sizeof(ccsidr));
 }
 
 static void update_cpu_ftr_reg(struct arm64_ftr_reg *reg, u64 new)

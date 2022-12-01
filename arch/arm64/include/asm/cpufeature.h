@@ -7,6 +7,7 @@
 #define __ASM_CPUFEATURE_H
 
 #include <asm/alternative-macros.h>
+#include <asm/cache.h>
 #include <asm/cpucaps.h>
 #include <asm/cputype.h>
 #include <asm/hwcap.h>
@@ -917,6 +918,13 @@ extern struct arm64_ftr_override id_aa64isar2_override;
 
 u32 get_kvm_ipa_limit(void);
 void dump_cpu_features(void);
+
+struct ccsidr {
+	u64 data;
+	u64 inst;
+};
+
+extern struct ccsidr ccsidr[MAX_CACHE_LEVEL + 1];
 
 #endif /* __ASSEMBLY__ */
 

@@ -111,8 +111,8 @@ static u32 get_ccsidr(struct kvm_vcpu *vcpu, u32 csselr)
 	 * geometry (which is not permitted by the architecture), they would
 	 * only do so for virtually indexed caches.]
 	 */
-	if (vcpu_cache_overridden(vcpu) && !(csselr & 1)) // data or unified cache
-		ccsidr &= ~GENMASK(27, 3);
+	if (vcpu_cache_overridden(vcpu) && !(csselr & CSSELR_IN)) // data or unified cache
+		ccsidr &= ~CCSIDR_ASSOCIATIVITY_BITS_MASK;
 
 	return ccsidr;
 }
