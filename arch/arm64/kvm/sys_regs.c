@@ -110,8 +110,13 @@ static u32 get_ccsidr(struct kvm_vcpu *vcpu, u32 csselr)
 	 * [If guests should attempt to infer aliasing properties from the
 	 * geometry (which is not permitted by the architecture), they would
 	 * only do so for virtually indexed caches.]
+	 *
+	 * This also makes sure the associativity bits of the CCSIDRs, including
+	 * the ones of CCSIDRs for instruction caches, are overridden when the
+	 * physical CPUs have a heterogeneous configuration so that a vCPU sees
+	 * the consistent values if it is migrated among physical CPUs.
 	 */
-	if (vcpu_cache_overridden(vcpu) && !(csselr & CSSELR_IN)) // data or unified cache
+	if (vcpu_cache_overridden(vcpu))
 		ccsidr &= ~CCSIDR_ASSOCIATIVITY_BITS_MASK;
 
 	return ccsidr;

@@ -64,6 +64,7 @@ static __always_inline bool vcpu_el1_is_32bit(struct kvm_vcpu *vcpu)
 static inline bool vcpu_cache_overridden(struct kvm_vcpu *vcpu)
 {
 	return cpus_have_const_cap(ARM64_MISMATCHED_CACHE_TYPE) ||
+	       cpus_have_const_cap(ARM64_MISMATCHED_CACHE_ASSOCIATIVITY) ||
 	       vcpu_el1_is_32bit(vcpu);
 }
 
