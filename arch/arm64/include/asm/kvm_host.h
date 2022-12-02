@@ -53,6 +53,9 @@
 
 #define KVM_HAVE_MMU_RWLOCK
 
+/* CSSELR values; used to index KVM_REG_ARM_DEMUX_ID_CCSIDR */
+#define CSSELR_MAX 14
+
 /*
  * Mode of operation configurable with kvm-arm.mode early param.
  * See Documentation/admin-guide/kernel-parameters.txt for more information.
@@ -340,6 +343,7 @@ struct kvm_cpu_context {
 	struct user_fpsimd_state fp_regs;
 
 	u64 sys_regs[NR_SYS_REGS];
+	u32 ccsidr[CSSELR_MAX + 1];
 
 	struct kvm_vcpu *__hyp_running_vcpu;
 };
