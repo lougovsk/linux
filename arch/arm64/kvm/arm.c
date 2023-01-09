@@ -1423,7 +1423,12 @@ void kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
 void kvm_arch_flush_remote_tlbs_memslot(struct kvm *kvm,
 					const struct kvm_memory_slot *memslot)
 {
-	kvm_flush_remote_tlbs(kvm);
+	phys_addr_t start, end;
+
+	start = memslot->base_gfn << PAGE_SHIFT;
+	end = (memslot->base_gfn + memslot->npages) << PAGE_SHIFT;
+
+	kvm_flush_remote_tlbs_range(kvm, start, end);
 }
 
 static int kvm_vm_ioctl_set_device_addr(struct kvm *kvm,
