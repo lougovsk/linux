@@ -368,6 +368,11 @@ void kvm_flush_remote_tlbs(struct kvm *kvm)
 		++kvm->stat.generic.remote_tlb_flush;
 }
 EXPORT_SYMBOL_GPL(kvm_flush_remote_tlbs);
+
+void kvm_flush_remote_tlbs_range(struct kvm *kvm, unsigned long start, unsigned long end)
+{
+	kvm_flush_remote_tlbs(kvm);
+}
 #endif
 
 static void kvm_flush_shadow_all(struct kvm *kvm)
@@ -629,7 +634,7 @@ static __always_inline int __kvm_handle_hva_range(struct kvm *kvm,
 	}
 
 	if (range->flush_on_ret && ret)
-		kvm_flush_remote_tlbs(kvm);
+		kvm_flush_remote_tlbs_range(kvm, range->start, range->end - 1);
 
 	if (locked) {
 		KVM_MMU_UNLOCK(kvm);

@@ -92,6 +92,16 @@ void kvm_flush_remote_tlbs(struct kvm *kvm)
 	kvm_call_hyp(__kvm_tlb_flush_vmid, &kvm->arch.mmu);
 }
 
+void kvm_flush_remote_tlbs_range(struct kvm *kvm, unsigned long start, unsigned long end)
+{
+	struct kvm_s2_mmu *mmu = &kvm->arch.mmu;
+
+	if (system_supports_tlb_range())
+		kvm_call_hyp(__kvm_tlb_flush_range_vmid_ipa, mmu, start, end, 0);
+	else
+		kvm_flush_remote_tlbs(kvm);
+}
+
 static bool kvm_is_device_pfn(unsigned long pfn)
 {
 	return !pfn_is_map_memory(pfn);
