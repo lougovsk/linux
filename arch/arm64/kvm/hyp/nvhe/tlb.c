@@ -55,6 +55,30 @@ static void __tlb_switch_to_host(struct tlb_inv_context *cxt)
 	}
 }
 
+void __kvm_tlb_flush_range_vmid_ipa(struct kvm_s2_mmu *mmu, phys_addr_t start,
+					phys_addr_t end, int level)
+{
+	struct tlb_inv_context cxt;
+
+	dsb(ishst);
+
+	/* Switch to requested VMID */
+	__tlb_switch_to_guest(mmu, &cxt);
+
+	__kvm_tlb_flush_range(ipas2e1is, mmu, start, end, level);
+
+	dsb(ish);
+	__tlbi(vmalle1is);
+	dsb(ish);
+	isb();
+
+	/* See the comment below in __kvm_tlb_flush_vmid_ipa() */
+	if (icache_is_vpipt())
+		icache_inval_all_pou();
+
+	__tlb_switch_to_host(&cxt);
+}
+
 void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu,
 			      phys_addr_t ipa, int level)
 {

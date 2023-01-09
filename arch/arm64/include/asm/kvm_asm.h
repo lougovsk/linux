@@ -79,6 +79,7 @@ enum __kvm_host_smccc_func {
 	__KVM_HOST_SMCCC_FUNC___pkvm_init_vm,
 	__KVM_HOST_SMCCC_FUNC___pkvm_init_vcpu,
 	__KVM_HOST_SMCCC_FUNC___pkvm_teardown_vm,
+	__KVM_HOST_SMCCC_FUNC___kvm_tlb_flush_range_vmid_ipa,
 };
 
 #define DECLARE_KVM_VHE_SYM(sym)	extern char sym[]
@@ -221,10 +222,30 @@ DECLARE_KVM_NVHE_SYM(__per_cpu_end);
 DECLARE_KVM_HYP_SYM(__bp_harden_hyp_vecs);
 #define __bp_harden_hyp_vecs	CHOOSE_HYP_SYM(__bp_harden_hyp_vecs)
 
+#define __kvm_tlb_flush_range(op, mmu, start, end, tlb_level) do {		\
+	unsigned long pages, stride;						\
+										\
+	stride = PAGE_SIZE;							\
+	start = round_down(start, stride);					\
+	end = round_up(end, stride);						\
+	pages = (end - start) >> PAGE_SHIFT;					\
+										\
+	if ((!system_supports_tlb_range() &&					\
+	     (end - start) >= (MAX_TLBI_OPS * stride)) ||			\
+	    pages >= MAX_TLBI_RANGE_PAGES) {					\
+		__kvm_tlb_flush_vmid(mmu);					\
+		break;								\
+	}									\
+										\
+	__flush_tlb_range_op(op, start, pages, stride, 0, tlb_level, false);	\
+} while (0)
+
 extern void __kvm_flush_vm_context(void);
 extern void __kvm_flush_cpu_context(struct kvm_s2_mmu *mmu);
 extern void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu, phys_addr_t ipa,
 				     int level);
+extern void __kvm_tlb_flush_range_vmid_ipa(struct kvm_s2_mmu *mmu, phys_addr_t start,
+						phys_addr_t end, int level);
 extern void __kvm_tlb_flush_vmid(struct kvm_s2_mmu *mmu);
 
 extern void __kvm_timer_set_cntvoff(u64 cntvoff);

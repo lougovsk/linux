@@ -79,6 +79,26 @@ static void __tlb_switch_to_host(struct tlb_inv_context *cxt)
 	local_irq_restore(cxt->flags);
 }
 
+void __kvm_tlb_flush_range_vmid_ipa(struct kvm_s2_mmu *mmu, phys_addr_t start,
+					phys_addr_t end, int level)
+{
+	struct tlb_inv_context cxt;
+
+	dsb(ishst);
+
+	/* Switch to requested VMID */
+	__tlb_switch_to_guest(mmu, &cxt);
+
+	__kvm_tlb_flush_range(ipas2e1is, mmu, start, end, level);
+
+	dsb(ish);
+	__tlbi(vmalle1is);
+	dsb(ish);
+	isb();
+
+	__tlb_switch_to_host(&cxt);
+}
+
 void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu,
 			      phys_addr_t ipa, int level)
 {
