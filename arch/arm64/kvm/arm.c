@@ -2204,6 +2204,11 @@ static __init int kvm_arm_init(void)
 	int err;
 	bool in_hyp_mode;
 
+	if (icache_is_vpipt()) {
+		kvm_info("Incompatible VPIPT I-Cache policy\n");
+		return -ENODEV;
+	}
+
 	if (!is_hyp_mode_available()) {
 		kvm_info("HYP mode not available\n");
 		return -ENODEV;
