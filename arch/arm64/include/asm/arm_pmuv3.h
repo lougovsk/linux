@@ -20,6 +20,7 @@
 
 #include <asm/cpufeature.h>
 #include <asm/sysreg.h>
+#include <linux/kvm_host.h>
 
 /*
  * This code is really good
@@ -189,6 +190,21 @@ static inline u32 read_pmceid0(void)
 static inline u32 read_pmceid1(void)
 {
 	return read_sysreg(pmceid1_el0);
+}
+
+static inline void armv8pmu_kvm_set_events(u32 set, struct perf_event_attr *attr)
+{
+	kvm_set_pmu_events(set, attr);
+}
+
+static inline void armv8pmu_kvm_clr_events(u32 clr)
+{
+	kvm_clr_pmu_events(clr);
+}
+
+static inline bool armv8pmu_kvm_counter_deferred(struct perf_event_attr *attr)
+{
+	return kvm_pmu_counter_deferred(attr);
 }
 
 #endif

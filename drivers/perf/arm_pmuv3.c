@@ -16,7 +16,6 @@
 
 #include <linux/acpi.h>
 #include <linux/clocksource.h>
-#include <linux/kvm_host.h>
 #include <linux/of.h>
 #include <linux/perf/arm_pmu.h>
 #include <linux/perf/arm_pmuv3.h>
@@ -607,10 +606,10 @@ static inline void armv8pmu_enable_event_counter(struct perf_event *event)
 	struct perf_event_attr *attr = &event->attr;
 	u32 mask = armv8pmu_event_cnten_mask(event);
 
-	kvm_set_pmu_events(mask, attr);
+	armv8pmu_kvm_set_events(mask, attr);
 
 	/* We rely on the hypervisor switch code to enable guest counters */
-	if (!kvm_pmu_counter_deferred(attr))
+	if (!armv8pmu_kvm_counter_deferred(attr))
 		armv8pmu_enable_counter(mask);
 }
 
@@ -629,10 +628,10 @@ static inline void armv8pmu_disable_event_counter(struct perf_event *event)
 	struct perf_event_attr *attr = &event->attr;
 	u32 mask = armv8pmu_event_cnten_mask(event);
 
-	kvm_clr_pmu_events(mask);
+	armv8pmu_kvm_clr_events(mask);
 
 	/* We rely on the hypervisor switch code to disable guest counters */
-	if (!kvm_pmu_counter_deferred(attr))
+	if (!armv8pmu_kvm_counter_deferred(attr))
 		armv8pmu_disable_counter(mask);
 }
 
@@ -968,7 +967,7 @@ static void armv8pmu_reset(void *info)
 	armv8pmu_disable_intens(U32_MAX);
 
 	/* Clear the counters we flip at guest entry/exit */
-	kvm_clr_pmu_events(U32_MAX);
+	armv8pmu_kvm_clr_events(U32_MAX);
 
 	/*
 	 * Initialize & Reset PMNC. Request overflow interrupt for
