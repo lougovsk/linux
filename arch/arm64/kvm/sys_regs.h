@@ -247,7 +247,7 @@ const struct sys_reg_desc *kvm_arm_find_id_reg(const struct sys_reg_params *para
 void kvm_arm_reset_id_regs(struct kvm_vcpu *vcpu);
 int kvm_arm_get_id_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg);
 int kvm_arm_set_id_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg);
-bool kvm_arm_check_idreg_table(void);
+bool kvm_arm_idreg_table_init(void);
 int kvm_arm_walk_id_regs(struct kvm_vcpu *vcpu, u64 __user *uind);
 u64 kvm_arm_read_id_reg_with_encoding(const struct kvm_vcpu *vcpu, u32 id);
 
