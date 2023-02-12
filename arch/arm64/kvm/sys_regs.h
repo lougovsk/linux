@@ -226,6 +226,7 @@ static inline bool write_to_read_only(struct kvm_vcpu *vcpu,
 	return false;
 }
 
+bool index_to_params(u64 id, struct sys_reg_params *params);
 const struct sys_reg_desc *get_reg_by_id(u64 id,
 					 const struct sys_reg_desc table[],
 					 unsigned int num);
