@@ -19,11 +19,12 @@
  * higher exception levels (EL2, EL3). Verify this functionality by
  * configuring and trying to count the events for EL2 in the guest.
  *
- * 4. Since the PMU registers are per-cpu, stress KVM by frequently
- * migrating the guest vCPU to random pCPUs in the system, and check
- * if the vPMU is still behaving as expected. The sub-tests include
- * testing basic functionalities such as basic counters behavior,
- * overflow, overflow interrupts, and chained events.
+ * 4. Since the PMU registers are per-cpu, stress KVM by creating a
+ * multi-vCPU VM, then frequently migrate the guest vCPUs to random
+ * pCPUs in the system, and check if the vPMU is still behaving as
+ * expected. The sub-tests include testing basic functionalities such
+ * as basic counters behavior, overflow, overflow interrupts, and
+ * chained events.
  *
  * Copyright (c) 2022 Google LLC.
  *
@@ -348,19 +349,22 @@ struct guest_irq_data {
 	struct spinlock lock;
 };
 
-static struct guest_irq_data guest_irq_data;
+static struct guest_irq_data guest_irq_data[KVM_MAX_VCPUS];
 
 #define VCPU_MIGRATIONS_TEST_ITERS_DEF		1000
 #define VCPU_MIGRATIONS_TEST_MIGRATION_FREQ_MS	2
+#define VCPU_MIGRATIONS_TEST_NR_VPUS_DEF	2
 
 struct test_args {
 	int vcpu_migration_test_iter;
 	int vcpu_migration_test_migrate_freq_ms;
+	int vcpu_migration_test_nr_vcpus;
 };
 
 static struct test_args test_args = {
 	.vcpu_migration_test_iter = VCPU_MIGRATIONS_TEST_ITERS_DEF,
 	.vcpu_migration_test_migrate_freq_ms = VCPU_MIGRATIONS_TEST_MIGRATION_FREQ_MS,
+	.vcpu_migration_test_nr_vcpus = VCPU_MIGRATIONS_TEST_NR_VPUS_DEF,
 };
 
 static void guest_sync_handler(struct ex_regs *regs)
@@ -396,26 +400,34 @@ static void guest_validate_irq(int pmc_idx, uint32_t pmovsclr, uint32_t pmc_idx_
 	}
 }
 
+static struct guest_irq_data *get_irq_data(void)
+{
+	uint32_t cpu = guest_get_vcpuid();
+
+	return &guest_irq_data[cpu];
+}
+
 static void guest_irq_handler(struct ex_regs *regs)
 {
 	uint32_t pmc_idx_bmap;
 	uint64_t i, pmcr_n = get_pmcr_n();
 	uint32_t pmovsclr = read_pmovsclr();
 	unsigned int intid = gic_get_and_ack_irq();
+	struct guest_irq_data *irq_data = get_irq_data();
 
 	/* No other IRQ apart from the PMU IRQ is expected */
 	GUEST_ASSERT_1(intid == PMU_IRQ, intid);
 
-	spin_lock(&guest_irq_data.lock);
-	pmc_idx_bmap = READ_ONCE(guest_irq_data.pmc_idx_bmap);
+	spin_lock(&irq_data->lock);
+	pmc_idx_bmap = READ_ONCE(irq_data->pmc_idx_bmap);
 
 	for (i = 0; i < pmcr_n; i++)
 		guest_validate_irq(i, pmovsclr, pmc_idx_bmap);
 	guest_validate_irq(ARMV8_PMU_CYCLE_COUNTER_IDX, pmovsclr, pmc_idx_bmap);
 
 	/* Mark IRQ as recived for the corresponding PMCs */
-	WRITE_ONCE(guest_irq_data.irq_received_bmap, pmovsclr);
-	spin_unlock(&guest_irq_data.lock);
+	WRITE_ONCE(irq_data->irq_received_bmap, pmovsclr);
+	spin_unlock(&irq_data->lock);
 
 	gic_set_eoi(intid);
 }
@@ -423,35 +435,40 @@ static void guest_irq_handler(struct ex_regs *regs)
 static int pmu_irq_received(int pmc_idx)
 {
 	bool irq_received;
+	struct guest_irq_data *irq_data = get_irq_data();
 
-	spin_lock(&guest_irq_data.lock);
-	irq_received = READ_ONCE(guest_irq_data.irq_received_bmap) & BIT(pmc_idx);
-	WRITE_ONCE(guest_irq_data.irq_received_bmap, guest_irq_data.pmc_idx_bmap & ~BIT(pmc_idx));
-	spin_unlock(&guest_irq_data.lock);
+	spin_lock(&irq_data->lock);
+	irq_received = READ_ONCE(irq_data->irq_received_bmap) & BIT(pmc_idx);
+	WRITE_ONCE(irq_data->irq_received_bmap, irq_data->pmc_idx_bmap & ~BIT(pmc_idx));
+	spin_unlock(&irq_data->lock);
 
 	return irq_received;
 }
 
 static void pmu_irq_init(int pmc_idx)
 {
+	struct guest_irq_data *irq_data = get_irq_data();
+
 	write_pmovsclr(BIT(pmc_idx));
 
-	spin_lock(&guest_irq_data.lock);
-	WRITE_ONCE(guest_irq_data.irq_received_bmap, guest_irq_data.pmc_idx_bmap & ~BIT(pmc_idx));
-	WRITE_ONCE(guest_irq_data.pmc_idx_bmap, guest_irq_data.pmc_idx_bmap | BIT(pmc_idx));
-	spin_unlock(&guest_irq_data.lock);
+	spin_lock(&irq_data->lock);
+	WRITE_ONCE(irq_data->irq_received_bmap, irq_data->pmc_idx_bmap & ~BIT(pmc_idx));
+	WRITE_ONCE(irq_data->pmc_idx_bmap, irq_data->pmc_idx_bmap | BIT(pmc_idx));
+	spin_unlock(&irq_data->lock);
 
 	enable_irq(pmc_idx);
 }
 
 static void pmu_irq_exit(int pmc_idx)
 {
+	struct guest_irq_data *irq_data = get_irq_data();
+
 	write_pmovsclr(BIT(pmc_idx));
 
-	spin_lock(&guest_irq_data.lock);
-	WRITE_ONCE(guest_irq_data.irq_received_bmap, guest_irq_data.pmc_idx_bmap & ~BIT(pmc_idx));
-	WRITE_ONCE(guest_irq_data.pmc_idx_bmap, guest_irq_data.pmc_idx_bmap & ~BIT(pmc_idx));
-	spin_unlock(&guest_irq_data.lock);
+	spin_lock(&irq_data->lock);
+	WRITE_ONCE(irq_data->irq_received_bmap, irq_data->pmc_idx_bmap & ~BIT(pmc_idx));
+	WRITE_ONCE(irq_data->pmc_idx_bmap, irq_data->pmc_idx_bmap & ~BIT(pmc_idx));
+	spin_unlock(&irq_data->lock);
 
 	disable_irq(pmc_idx);
 }
@@ -783,7 +800,8 @@ static void test_event_count(uint64_t event, int pmc_idx, bool expect_count)
 static void test_basic_pmu_functionality(void)
 {
 	local_irq_disable();
-	gic_init(GIC_V3, 1, (void *)GICD_BASE_GPA, (void *)GICR_BASE_GPA);
+	gic_init(GIC_V3, test_args.vcpu_migration_test_nr_vcpus,
+			(void *)GICD_BASE_GPA, (void *)GICR_BASE_GPA);
 	gic_irq_enable(PMU_IRQ);
 	local_irq_enable();
 
@@ -1093,11 +1111,13 @@ static void guest_evtype_filter_test(void)
 
 static void guest_vcpu_migration_test(void)
 {
+	int iter = test_args.vcpu_migration_test_iter;
+
 	/*
 	 * While the userspace continuously migrates this vCPU to random pCPUs,
 	 * run basic PMU functionalities and verify the results.
 	 */
-	while (test_args.vcpu_migration_test_iter--)
+	while (iter--)
 		test_basic_pmu_functionality();
 }
 
@@ -1472,17 +1492,23 @@ static void run_kvm_evtype_filter_test(void)
 
 struct vcpu_migrate_data {
 	struct vpmu_vm *vpmu_vm;
-	pthread_t *pt_vcpu;
-	bool vcpu_done;
+	pthread_t *pt_vcpus;
+	unsigned long *vcpu_done_map;
+	pthread_mutex_t vcpu_done_map_lock;
 };
+
+struct vcpu_migrate_data migrate_data;
 
 static void *run_vcpus_migrate_test_func(void *arg)
 {
-	struct vcpu_migrate_data *migrate_data = arg;
-	struct vpmu_vm *vpmu_vm = migrate_data->vpmu_vm;
+	struct vpmu_vm *vpmu_vm = migrate_data.vpmu_vm;
+	unsigned int vcpu_idx = (unsigned long)arg;
 
-	run_vcpu(vpmu_vm->vcpus[0]);
-	migrate_data->vcpu_done = true;
+	run_vcpu(vpmu_vm->vcpus[vcpu_idx]);
+
+	pthread_mutex_lock(&migrate_data.vcpu_done_map_lock);
+	__set_bit(vcpu_idx, migrate_data.vcpu_done_map);
+	pthread_mutex_unlock(&migrate_data.vcpu_done_map_lock);
 
 	return NULL;
 }
@@ -1504,7 +1530,7 @@ static uint32_t get_pcpu(void)
 	return pcpu;
 }
 
-static int migrate_vcpu(struct vcpu_migrate_data *migrate_data)
+static int migrate_vcpu(int vcpu_idx)
 {
 	int ret;
 	cpu_set_t cpuset;
@@ -1513,9 +1539,9 @@ static int migrate_vcpu(struct vcpu_migrate_data *migrate_data)
 	CPU_ZERO(&cpuset);
 	CPU_SET(new_pcpu, &cpuset);
 
-	pr_debug("Migrating vCPU to pCPU: %u\n", new_pcpu);
+	pr_debug("Migrating vCPU %d to pCPU: %u\n", vcpu_idx, new_pcpu);
 
-	ret = pthread_setaffinity_np(*migrate_data->pt_vcpu, sizeof(cpuset), &cpuset);
+	ret = pthread_setaffinity_np(migrate_data.pt_vcpus[vcpu_idx], sizeof(cpuset), &cpuset);
 
 	/* Allow the error where the vCPU thread is already finished */
 	TEST_ASSERT(ret == 0 || ret == ESRCH,
@@ -1526,48 +1552,74 @@ static int migrate_vcpu(struct vcpu_migrate_data *migrate_data)
 
 static void *vcpus_migrate_func(void *arg)
 {
-	struct vcpu_migrate_data *migrate_data = arg;
+	struct vpmu_vm *vpmu_vm = migrate_data.vpmu_vm;
+	int i, n_done, nr_vcpus = vpmu_vm->nr_vcpus;
+	bool vcpu_done;
 
-	while (!migrate_data->vcpu_done) {
+	do {
 		usleep(msecs_to_usecs(test_args.vcpu_migration_test_migrate_freq_ms));
-		migrate_vcpu(migrate_data);
-	}
+		for (n_done = 0, i = 0; i < nr_vcpus; i++) {
+			pthread_mutex_lock(&migrate_data.vcpu_done_map_lock);
+			vcpu_done = test_bit(i, migrate_data.vcpu_done_map);
+			pthread_mutex_unlock(&migrate_data.vcpu_done_map_lock);
+
+			if (vcpu_done) {
+				n_done++;
+				continue;
+			}
+
+			migrate_vcpu(i);
+		}
+
+	} while (nr_vcpus != n_done);
 
 	return NULL;
 }
 
 static void run_vcpu_migration_test(uint64_t pmcr_n)
 {
-	int ret;
+	int i, nr_vcpus, ret;
 	struct vpmu_vm *vpmu_vm;
-	pthread_t pt_vcpu, pt_sched;
-	struct vcpu_migrate_data migrate_data = {
-		.pt_vcpu = &pt_vcpu,
-		.vcpu_done = false,
-	};
+	pthread_t pt_sched, *pt_vcpus;
 
 	__TEST_REQUIRE(get_nprocs() >= 2, "At least two pCPUs needed for vCPU migration test");
 
 	guest_data.test_stage = TEST_STAGE_VCPU_MIGRATION;
 	guest_data.expected_pmcr_n = pmcr_n;
 
-	migrate_data.vpmu_vm = vpmu_vm = create_vpmu_vm(1, guest_code, NULL);
+	nr_vcpus = test_args.vcpu_migration_test_nr_vcpus;
+
+	migrate_data.vcpu_done_map = bitmap_zalloc(nr_vcpus);
+	TEST_ASSERT(migrate_data.vcpu_done_map, "Failed to create vCPU done bitmap");
+	pthread_mutex_init(&migrate_data.vcpu_done_map_lock, NULL);
+
+	migrate_data.pt_vcpus = pt_vcpus = calloc(nr_vcpus, sizeof(*pt_vcpus));
+	TEST_ASSERT(pt_vcpus, "Failed to create vCPU thread pointers");
+
+	migrate_data.vpmu_vm = vpmu_vm = create_vpmu_vm(nr_vcpus, guest_code, NULL);
 
 	/* Initialize random number generation for migrating vCPUs to random pCPUs */
 	srand(time(NULL));
 
-	/* Spawn a vCPU thread */
-	ret = pthread_create(&pt_vcpu, NULL, run_vcpus_migrate_test_func, &migrate_data);
-	TEST_ASSERT(!ret, "Failed to create the vCPU thread");
+	/* Spawn vCPU threads */
+	for (i = 0; i < nr_vcpus; i++) {
+		ret = pthread_create(&pt_vcpus[i], NULL,
+					run_vcpus_migrate_test_func,  (void *)(unsigned long)i);
+		TEST_ASSERT(!ret, "Failed to create the vCPU thread: %d", i);
+	}
 
 	/* Spawn a scheduler thread to force-migrate vCPUs to various pCPUs */
-	ret = pthread_create(&pt_sched, NULL, vcpus_migrate_func, &migrate_data);
+	ret = pthread_create(&pt_sched, NULL, vcpus_migrate_func, NULL);
 	TEST_ASSERT(!ret, "Failed to create the scheduler thread for migrating the vCPUs");
 
 	pthread_join(pt_sched, NULL);
-	pthread_join(pt_vcpu, NULL);
+
+	for (i = 0; i < nr_vcpus; i++)
+		pthread_join(pt_vcpus[i], NULL);
 
 	destroy_vpmu_vm(vpmu_vm);
+	free(pt_vcpus);
+	bitmap_free(migrate_data.vcpu_done_map);
 }
 
 static void run_tests(uint64_t pmcr_n)
@@ -1596,12 +1648,14 @@ static uint64_t get_pmcr_n_limit(void)
 
 static void print_help(char *name)
 {
-	pr_info("Usage: %s [-h] [-i vcpu_migration_test_iterations] [-m vcpu_migration_freq_ms]\n",
-		name);
+	pr_info("Usage: %s [-h] [-i vcpu_migration_test_iterations] [-m vcpu_migration_freq_ms]"
+		"[-n vcpu_migration_nr_vcpus]\n", name);
 	pr_info("\t-i: Number of iterations of vCPU migrations test (default: %u)\n",
 		VCPU_MIGRATIONS_TEST_ITERS_DEF);
 	pr_info("\t-m: Frequency (in ms) of vCPUs to migrate to different pCPU. (default: %u)\n",
 		VCPU_MIGRATIONS_TEST_MIGRATION_FREQ_MS);
+	pr_info("\t-n: Number of vCPUs for vCPU migrations test. (default: %u)\n",
+		VCPU_MIGRATIONS_TEST_NR_VPUS_DEF);
 	pr_info("\t-h: print this help screen\n");
 }
 
@@ -1609,7 +1663,7 @@ static bool parse_args(int argc, char *argv[])
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "hi:m:")) != -1) {
+	while ((opt = getopt(argc, argv, "hi:m:n:")) != -1) {
 		switch (opt) {
 		case 'i':
 			test_args.vcpu_migration_test_iter =
@@ -1618,6 +1672,14 @@ static bool parse_args(int argc, char *argv[])
 		case 'm':
 			test_args.vcpu_migration_test_migrate_freq_ms =
 				atoi_positive("vCPU migration frequency", optarg);
+			break;
+		case 'n':
+			test_args.vcpu_migration_test_nr_vcpus =
+				atoi_positive("Nr vCPUs for vCPU migrations", optarg);
+			if (test_args.vcpu_migration_test_nr_vcpus > KVM_MAX_VCPUS) {
+				pr_info("Max allowed vCPUs: %u\n", KVM_MAX_VCPUS);
+				goto err;
+			}
 			break;
 		case 'h':
 		default:
