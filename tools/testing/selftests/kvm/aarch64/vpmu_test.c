@@ -15,9 +15,13 @@
 #include <vgic.h>
 #include <asm/perf_event.h>
 #include <linux/bitfield.h>
+#include <linux/bitmap.h>
 
 /* The max number of the PMU event counters (excluding the cycle counter) */
 #define ARMV8_PMU_MAX_GENERAL_COUNTERS	(ARMV8_PMU_MAX_COUNTERS - 1)
+
+/* The max number of event numbers that's supported */
+#define ARMV8_PMU_MAX_EVENTS		64
 
 /*
  * The macros and functions below for reading/writing PMEV{CNTR,TYPER}<n>_EL0
@@ -224,6 +228,8 @@ struct pmc_accessor pmc_accessors[] = {
 	{ read_sel_evcntr, write_pmevcntrn, read_sel_evtyper, write_pmevtypern },
 };
 
+#define MAX_EVENT_FILTERS_PER_VM 10
+
 #define INVALID_EC	(-1ul)
 uint64_t expected_ec = INVALID_EC;
 uint64_t op_end_addr;
@@ -232,6 +238,7 @@ struct vpmu_vm {
 	struct kvm_vm *vm;
 	struct kvm_vcpu *vcpu;
 	int gic_fd;
+	unsigned long *pmu_filter;
 };
 
 enum test_stage {
@@ -541,8 +548,51 @@ static void guest_code(void)
 #define GICD_BASE_GPA	0x8000000ULL
 #define GICR_BASE_GPA	0x80A0000ULL
 
+static unsigned long *
+set_event_filters(struct kvm_vcpu *vcpu, struct kvm_pmu_event_filter *pmu_event_filters)
+{
+	int j;
+	unsigned long *pmu_filter;
+	struct kvm_device_attr filter_attr = {
+		.group = KVM_ARM_VCPU_PMU_V3_CTRL,
+		.attr = KVM_ARM_VCPU_PMU_V3_FILTER,
+	};
+
+	/*
+	 * Setting up of the bitmap is similar to what KVM does.
+	 * If the first filter denys an event, default all the others to allow, and vice-versa.
+	 */
+	pmu_filter = bitmap_zalloc(ARMV8_PMU_MAX_EVENTS);
+	TEST_ASSERT(pmu_filter, "Failed to allocate the pmu_filter");
+
+	if (pmu_event_filters[0].action == KVM_PMU_EVENT_DENY)
+		bitmap_fill(pmu_filter, ARMV8_PMU_MAX_EVENTS);
+
+	for (j = 0; j < MAX_EVENT_FILTERS_PER_VM; j++) {
+		struct kvm_pmu_event_filter *pmu_event_filter = &pmu_event_filters[j];
+
+		if (!pmu_event_filter->nevents)
+			break;
+
+		pr_debug("Applying event filter:: event: 0x%x; action: %s\n",
+				pmu_event_filter->base_event,
+				pmu_event_filter->action == KVM_PMU_EVENT_ALLOW ? "ALLOW" : "DENY");
+
+		filter_attr.addr = (uint64_t) pmu_event_filter;
+		vcpu_ioctl(vcpu, KVM_SET_DEVICE_ATTR, &filter_attr);
+
+		if (pmu_event_filter->action == KVM_PMU_EVENT_ALLOW)
+			__set_bit(pmu_event_filter->base_event, pmu_filter);
+		else
+			__clear_bit(pmu_event_filter->base_event, pmu_filter);
+	}
+
+	return pmu_filter;
+}
+
 /* Create a VM that has one vCPU with PMUv3 configured. */
-static struct vpmu_vm *create_vpmu_vm(void *guest_code)
+static struct vpmu_vm *
+create_vpmu_vm(void *guest_code, struct kvm_pmu_event_filter *pmu_event_filters)
 {
 	struct kvm_vm *vm;
 	struct kvm_vcpu *vcpu;
@@ -586,6 +636,9 @@ static struct vpmu_vm *create_vpmu_vm(void *guest_code)
 		    "Unexpected PMUVER (0x%x) on the vCPU with PMUv3", pmuver);
 
 	/* Initialize vPMU */
+	if (pmu_event_filters)
+		vpmu_vm->pmu_filter = set_event_filters(vcpu, pmu_event_filters);
+
 	vcpu_ioctl(vcpu, KVM_SET_DEVICE_ATTR, &irq_attr);
 	vcpu_ioctl(vcpu, KVM_SET_DEVICE_ATTR, &init_attr);
 
@@ -594,6 +647,8 @@ static struct vpmu_vm *create_vpmu_vm(void *guest_code)
 
 static void destroy_vpmu_vm(struct vpmu_vm *vpmu_vm)
 {
+	if (vpmu_vm->pmu_filter)
+		bitmap_free(vpmu_vm->pmu_filter);
 	close(vpmu_vm->gic_fd);
 	kvm_vm_free(vpmu_vm->vm);
 	free(vpmu_vm);
@@ -631,7 +686,7 @@ static void run_counter_access_test(uint64_t pmcr_n)
 	guest_data.expected_pmcr_n = pmcr_n;
 
 	pr_debug("Test with pmcr_n %lu\n", pmcr_n);
-	vpmu_vm = create_vpmu_vm(guest_code);
+	vpmu_vm = create_vpmu_vm(guest_code, NULL);
 	vcpu = vpmu_vm->vcpu;
 
 	/* Save the initial sp to restore them later to run the guest again */
@@ -676,7 +731,7 @@ static void run_counter_access_error_test(uint64_t pmcr_n)
 	guest_data.expected_pmcr_n = pmcr_n;
 
 	pr_debug("Error test with pmcr_n %lu (larger than the host)\n", pmcr_n);
-	vpmu_vm = create_vpmu_vm(guest_code);
+	vpmu_vm = create_vpmu_vm(guest_code, NULL);
 	vcpu = vpmu_vm->vcpu;
 
 	/* Update the PMCR_EL0.N with @pmcr_n */
@@ -719,9 +774,10 @@ static uint64_t get_pmcr_n_limit(void)
 	struct vpmu_vm *vpmu_vm;
 	uint64_t pmcr;
 
-	vpmu_vm = create_vpmu_vm(guest_code);
+	vpmu_vm = create_vpmu_vm(guest_code, NULL);
 	vcpu_get_reg(vpmu_vm->vcpu, KVM_ARM64_SYS_REG(SYS_PMCR_EL0), &pmcr);
 	destroy_vpmu_vm(vpmu_vm);
+
 	return FIELD_GET(ARMV8_PMU_PMCR_N, pmcr);
 }
 
