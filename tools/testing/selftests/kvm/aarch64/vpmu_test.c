@@ -15,6 +15,10 @@
  * of allowing or denying the events. The guest validates it by
  * checking if it's able to count only the events that are allowed.
  *
+ * 3. KVM doesn't allow the guest to count the events attributed with
+ * higher exception levels (EL2, EL3). Verify this functionality by
+ * configuring and trying to count the events for EL2 in the guest.
+ *
  * Copyright (c) 2022 Google LLC.
  *
  */
@@ -23,6 +27,7 @@
 #include <test_util.h>
 #include <vgic.h>
 #include <asm/perf_event.h>
+#include <linux/arm-smccc.h>
 #include <linux/bitfield.h>
 #include <linux/bitmap.h>
 
@@ -259,6 +264,7 @@ struct vpmu_vm {
 enum test_stage {
 	TEST_STAGE_COUNTER_ACCESS = 1,
 	TEST_STAGE_KVM_EVENT_FILTER,
+	TEST_STAGE_KVM_EVTYPE_FILTER,
 };
 
 struct guest_data {
@@ -678,6 +684,70 @@ static void guest_event_filter_test(unsigned long *pmu_filter)
 	}
 }
 
+static void guest_evtype_filter_test(void)
+{
+	int i;
+	struct pmc_accessor *acc;
+	uint64_t typer, cnt;
+	struct arm_smccc_res res;
+
+	pmu_enable();
+
+	/*
+	 * KVM blocks the guests from creating events for counting in Secure/Non-Secure Hyp (EL2),
+	 * Monitor (EL3), and Multithreading configuration. It applies the mask
+	 * ARMV8_PMU_EVTYPE_MASK against guest accesses to PMXEVTYPER_EL0, PMEVTYPERn_EL0,
+	 * and PMCCFILTR_EL0 registers to prevent this. Check if KVM honors this using all possible
+	 * ways to configure the EVTYPER.
+	 */
+	for (i = 0; i < ARRAY_SIZE(pmc_accessors); i++) {
+		acc = &pmc_accessors[i];
+
+		/* Set all filter bits (31-24), readback, and check against the mask */
+		acc->write_typer(0, 0xff000000);
+		typer = acc->read_typer(0);
+
+		GUEST_ASSERT_2((typer | ARMV8_PMU_EVTYPE_EVENT) == ARMV8_PMU_EVTYPE_MASK,
+				typer | ARMV8_PMU_EVTYPE_EVENT, ARMV8_PMU_EVTYPE_MASK);
+
+		/*
+		 * Regardless of ARMV8_PMU_EVTYPE_MASK, KVM sets perf attr.exclude_hv
+		 * to not count NS-EL2 events. Verify this functionality by configuring
+		 * a NS-EL2 event, for which the couunt shouldn't increment.
+		 */
+		typer = ARMV8_PMUV3_PERFCTR_INST_RETIRED;
+		typer |= ARMV8_PMU_INCLUDE_EL2 | ARMV8_PMU_EXCLUDE_EL1 | ARMV8_PMU_EXCLUDE_EL0;
+		acc->write_typer(0, typer);
+		acc->write_cntr(0, 0);
+		enable_counter(0);
+
+		/* Issue a hypercall to enter EL2 and return */
+		memset(&res, 0, sizeof(res));
+		smccc_hvc(ARM_SMCCC_VERSION_FUNC_ID, 0, 0, 0, 0, 0, 0, 0, &res);
+
+		cnt = acc->read_cntr(0);
+		GUEST_ASSERT_3(cnt == 0, cnt, typer, i);
+	}
+
+	/* Check the same sequence for the Cycle counter */
+	write_pmccfiltr(0xff000000);
+	typer = read_pmccfiltr();
+	GUEST_ASSERT_2((typer | ARMV8_PMU_EVTYPE_EVENT) == ARMV8_PMU_EVTYPE_MASK,
+				typer | ARMV8_PMU_EVTYPE_EVENT, ARMV8_PMU_EVTYPE_MASK);
+
+	typer = ARMV8_PMU_INCLUDE_EL2 | ARMV8_PMU_EXCLUDE_EL1 | ARMV8_PMU_EXCLUDE_EL0;
+	write_pmccfiltr(typer);
+	reset_cycle_counter();
+	enable_cycle_counter();
+
+	/* Issue a hypercall to enter EL2 and return */
+	memset(&res, 0, sizeof(res));
+	smccc_hvc(ARM_SMCCC_VERSION_FUNC_ID, 0, 0, 0, 0, 0, 0, 0, &res);
+
+	cnt = read_cycle_counter();
+	GUEST_ASSERT_2(cnt == 0, cnt, typer);
+}
+
 static void guest_code(void)
 {
 	switch (guest_data.test_stage) {
@@ -686,6 +756,9 @@ static void guest_code(void)
 		break;
 	case TEST_STAGE_KVM_EVENT_FILTER:
 		guest_event_filter_test(guest_data.pmu_filter);
+		break;
+	case TEST_STAGE_KVM_EVTYPE_FILTER:
+		guest_evtype_filter_test();
 		break;
 	default:
 		GUEST_ASSERT_1(0, guest_data.test_stage);
@@ -1014,10 +1087,22 @@ static void run_kvm_event_filter_test(void)
 	run_kvm_event_filter_error_tests();
 }
 
+static void run_kvm_evtype_filter_test(void)
+{
+	struct vpmu_vm *vpmu_vm;
+
+	guest_data.test_stage = TEST_STAGE_KVM_EVTYPE_FILTER;
+
+	vpmu_vm = create_vpmu_vm(guest_code, NULL);
+	run_vcpu(vpmu_vm->vcpu);
+	destroy_vpmu_vm(vpmu_vm);
+}
+
 static void run_tests(uint64_t pmcr_n)
 {
 	run_counter_access_tests(pmcr_n);
 	run_kvm_event_filter_test();
+	run_kvm_evtype_filter_test();
 }
 
 /*
