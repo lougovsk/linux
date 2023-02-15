@@ -23,7 +23,7 @@
  * migrating the guest vCPU to random pCPUs in the system, and check
  * if the vPMU is still behaving as expected. The sub-tests include
  * testing basic functionalities such as basic counters behavior,
- * overflow, and overflow interrupts.
+ * overflow, overflow interrupts, and chained events.
  *
  * Copyright (c) 2022 Google LLC.
  *
@@ -60,6 +60,8 @@
 #define COUNT_TO_OVERFLOW	0xFULL
 #define PRE_OVERFLOW_32		(GENMASK(31, 0) - COUNT_TO_OVERFLOW + 1)
 #define PRE_OVERFLOW_64		(GENMASK(63, 0) - COUNT_TO_OVERFLOW + 1)
+
+#define ALL_SET_64		GENMASK(63, 0)
 
 #define GICD_BASE_GPA	0x8000000ULL
 #define GICR_BASE_GPA	0x80A0000ULL
@@ -639,6 +641,75 @@ static void test_cycles_count(bool expect_count, bool test_overflow)
 	pmu_disable_reset();
 }
 
+static void test_chained_count(int pmc_idx)
+{
+	int i, chained_pmc_idx;
+	struct pmc_accessor *acc;
+	uint64_t pmcr_n, cnt, cntr_val;
+
+	/* The test needs at least two PMCs */
+	pmcr_n = get_pmcr_n();
+	GUEST_ASSERT_1(pmcr_n >= 2, pmcr_n);
+
+	/*
+	 * The chained counter's idx is always chained with (pmc_idx + 1).
+	 * pmc_idx should be even as the chained event doesn't count on
+	 * odd numbered counters.
+	 */
+	GUEST_ASSERT_1(pmc_idx % 2 == 0, pmc_idx);
+
+	/*
+	 * The max counter idx that the chained counter can occupy is
+	 * (pmcr_n - 1), while the actual event sits on (pmcr_n - 2).
+	 */
+	chained_pmc_idx = pmc_idx + 1;
+	GUEST_ASSERT(chained_pmc_idx < pmcr_n);
+
+	enable_counter(chained_pmc_idx);
+	pmu_irq_init(chained_pmc_idx);
+
+	/* Configure the chained event using all the possible ways*/
+	for (i = 0; i < ARRAY_SIZE(pmc_accessors); i++) {
+		acc = &pmc_accessors[i];
+
+		/* Test if the chained counter increments when the base event overflows */
+
+		cntr_val = 1;
+		acc->write_cntr(chained_pmc_idx, cntr_val);
+		acc->write_typer(chained_pmc_idx, ARMV8_PMUV3_PERFCTR_CHAIN);
+
+		/* Chain the counter with pmc_idx that's configured for an overflow */
+		test_instructions_count(pmc_idx, true, true);
+
+		/*
+		 * pmc_idx is also configured to run for all the ARRAY_SIZE(pmc_accessors)
+		 * combinations. Hence, the chained chained_pmc_idx is expected to be
+		 * cntr_val + ARRAY_SIZE(pmc_accessors).
+		 */
+		cnt = acc->read_cntr(chained_pmc_idx);
+		GUEST_ASSERT_4(cnt == cntr_val + ARRAY_SIZE(pmc_accessors),
+				pmc_idx, i, cnt, cntr_val + ARRAY_SIZE(pmc_accessors));
+
+		/* Test for the overflow of the chained counter itself */
+
+		cntr_val = ALL_SET_64;
+		acc->write_cntr(chained_pmc_idx, cntr_val);
+
+		test_instructions_count(pmc_idx, true, true);
+
+		/*
+		 * At this point, an interrupt should've been fired for the chained
+		 * counter (which validates the overflow bit), and the counter should've
+		 * wrapped around to ARRAY_SIZE(pmc_accessors) - 1.
+		 */
+		cnt = acc->read_cntr(chained_pmc_idx);
+		GUEST_ASSERT_4(cnt == ARRAY_SIZE(pmc_accessors) - 1,
+				pmc_idx, i, cnt, ARRAY_SIZE(pmc_accessors));
+	}
+
+	pmu_irq_exit(chained_pmc_idx);
+}
+
 static void test_event_count(uint64_t event, int pmc_idx, bool expect_count)
 {
 	switch (event) {
@@ -665,6 +736,9 @@ static void test_basic_pmu_functionality(void)
 	/* Test overflow with interrupts on generic and cycle counters */
 	test_instructions_count(0, true, true);
 	test_cycles_count(true, true);
+
+	/* Test chained events */
+	test_chained_count(0);
 }
 
 /*
