@@ -2,12 +2,21 @@
 /*
  * vpmu_test - Test the vPMU
  *
- * Copyright (c) 2022 Google LLC.
+ * The test suit contains a series of checks to validate the vPMU
+ * functionality. This test runs only when KVM_CAP_ARM_PMU_V3 is
+ * supported on the host. The tests include:
  *
- * This test checks if the guest can see the same number of the PMU event
+ * 1. Check if the guest can see the same number of the PMU event
  * counters (PMCR_EL0.N) that userspace sets, if the guest can access
  * those counters, and if the guest cannot access any other counters.
- * This test runs only when KVM_CAP_ARM_PMU_V3 is supported on the host.
+ *
+ * 2. Test the functionality of KVM's KVM_ARM_VCPU_PMU_V3_FILTER
+ * attribute by applying a series of filters in various combinations
+ * of allowing or denying the events. The guest validates it by
+ * checking if it's able to count only the events that are allowed.
+ *
+ * Copyright (c) 2022 Google LLC.
+ *
  */
 #include <kvm_util.h>
 #include <processor.h>
@@ -230,6 +239,12 @@ struct pmc_accessor pmc_accessors[] = {
 
 #define MAX_EVENT_FILTERS_PER_VM 10
 
+#define EVENT_ALLOW(ev) \
+	{.base_event = ev, .nevents = 1, .action = KVM_PMU_EVENT_ALLOW}
+
+#define EVENT_DENY(ev) \
+	{.base_event = ev, .nevents = 1, .action = KVM_PMU_EVENT_DENY}
+
 #define INVALID_EC	(-1ul)
 uint64_t expected_ec = INVALID_EC;
 uint64_t op_end_addr;
@@ -243,11 +258,13 @@ struct vpmu_vm {
 
 enum test_stage {
 	TEST_STAGE_COUNTER_ACCESS = 1,
+	TEST_STAGE_KVM_EVENT_FILTER,
 };
 
 struct guest_data {
 	enum test_stage test_stage;
 	uint64_t expected_pmcr_n;
+	unsigned long *pmu_filter;
 };
 
 static struct guest_data guest_data;
@@ -327,6 +344,113 @@ static bool pmu_event_is_supported(uint64_t event)
 		GUEST_ASSERT_3((_tval & mask), _tval, mask, set_expected); \
 	else								   \
 		GUEST_ASSERT_3(!(_tval & mask), _tval, mask, set_expected);\
+}
+
+
+/*
+ * Extra instructions inserted by the compiler would be difficult to compensate
+ * for, so hand assemble everything between, and including, the PMCR accesses
+ * to start and stop counting. isb instructions are inserted to make sure
+ * pmccntr read after this function returns the exact instructions executed
+ * in the controlled block. Total instrs = isb + nop + 2*loop = 2 + 2*loop.
+ */
+static inline void precise_instrs_loop(int loop, uint32_t pmcr)
+{
+	uint64_t pmcr64 = pmcr;
+
+	asm volatile(
+	"	msr	pmcr_el0, %[pmcr]\n"
+	"	isb\n"
+	"1:	subs	%w[loop], %w[loop], #1\n"
+	"	b.gt	1b\n"
+	"	nop\n"
+	"	msr	pmcr_el0, xzr\n"
+	"	isb\n"
+	: [loop] "+r" (loop)
+	: [pmcr] "r" (pmcr64)
+	: "cc");
+}
+
+/*
+ * Execute a known number of guest instructions. Only even instruction counts
+ * greater than or equal to 4 are supported by the in-line assembly code. The
+ * control register (PMCR_EL0) is initialized with the provided value (allowing
+ * for example for the cycle counter or event counters to be reset). At the end
+ * of the exact instruction loop, zero is written to PMCR_EL0 to disable
+ * counting, allowing the cycle counter or event counters to be read at the
+ * leisure of the calling code.
+ */
+static void execute_precise_instrs(int num, uint32_t pmcr)
+{
+	int loop = (num - 2) / 2;
+
+	GUEST_ASSERT_2(num >= 4 && ((num - 2) % 2 == 0), num, loop);
+	precise_instrs_loop(loop, pmcr);
+}
+
+static void test_instructions_count(int pmc_idx, bool expect_count)
+{
+	int i;
+	struct pmc_accessor *acc;
+	uint64_t cnt;
+	int instrs_count = 100;
+
+	enable_counter(pmc_idx);
+
+	/* Test the event using all the possible way to configure the event */
+	for (i = 0; i < ARRAY_SIZE(pmc_accessors); i++) {
+		acc = &pmc_accessors[i];
+
+		pmu_disable_reset();
+
+		acc->write_typer(pmc_idx, ARMV8_PMUV3_PERFCTR_INST_RETIRED);
+
+		/* Enable the PMU and execute precisely number of instructions as a workload */
+		execute_precise_instrs(instrs_count, read_sysreg(pmcr_el0) | ARMV8_PMU_PMCR_E);
+
+		/* If a count is expected, the counter should be increased by 'instrs_count' */
+		cnt = acc->read_cntr(pmc_idx);
+		GUEST_ASSERT_4(expect_count == (cnt == instrs_count),
+				i, expect_count, cnt, instrs_count);
+	}
+
+	disable_counter(pmc_idx);
+}
+
+static void test_cycles_count(bool expect_count)
+{
+	uint64_t cnt;
+
+	pmu_enable();
+	reset_cycle_counter();
+
+	/* Count cycles in EL0 and EL1 */
+	write_pmccfiltr(0);
+	enable_cycle_counter();
+
+	cnt = read_cycle_counter();
+
+	/*
+	 * If a count is expected by the test, the cycle counter should be increased by
+	 * at least 1, as there is at least one instruction between enabling the
+	 * counter and reading the counter.
+	 */
+	GUEST_ASSERT_2(expect_count == (cnt > 0), cnt, expect_count);
+
+	disable_cycle_counter();
+	pmu_disable_reset();
+}
+
+static void test_event_count(uint64_t event, int pmc_idx, bool expect_count)
+{
+	switch (event) {
+	case ARMV8_PMUV3_PERFCTR_INST_RETIRED:
+		test_instructions_count(pmc_idx, expect_count);
+		break;
+	case ARMV8_PMUV3_PERFCTR_CPU_CYCLES:
+		test_cycles_count(expect_count);
+		break;
+	}
 }
 
 /*
@@ -532,11 +656,36 @@ static void guest_counter_access_test(uint64_t expected_pmcr_n)
 	}
 }
 
+static void guest_event_filter_test(unsigned long *pmu_filter)
+{
+	uint64_t event;
+
+	/*
+	 * Check if PMCEIDx_EL0 is advertized as configured by the userspace.
+	 * It's possible that even though the userspace allowed it, it may not be supported
+	 * by the hardware and could be advertized as 'disabled'. Hence, only validate against
+	 * the events that are advertized.
+	 *
+	 * Furthermore, check if the event is in fact counting if enabled, or vice-versa.
+	 */
+	for (event = 0; event < ARMV8_PMU_MAX_EVENTS - 1; event++) {
+		if (pmu_event_is_supported(event)) {
+			GUEST_ASSERT_1(test_bit(event, pmu_filter), event);
+			test_event_count(event, 0, true);
+		} else {
+			test_event_count(event, 0, false);
+		}
+	}
+}
+
 static void guest_code(void)
 {
 	switch (guest_data.test_stage) {
 	case TEST_STAGE_COUNTER_ACCESS:
 		guest_counter_access_test(guest_data.expected_pmcr_n);
+		break;
+	case TEST_STAGE_KVM_EVENT_FILTER:
+		guest_event_filter_test(guest_data.pmu_filter);
 		break;
 	default:
 		GUEST_ASSERT_1(0, guest_data.test_stage);
@@ -760,9 +909,115 @@ static void run_counter_access_tests(uint64_t pmcr_n)
 		run_counter_access_error_test(i);
 }
 
+static struct kvm_pmu_event_filter pmu_event_filters[][MAX_EVENT_FILTERS_PER_VM] = {
+	/*
+	 * Each set of events denotes a filter configuration for that VM.
+	 * During VM creation, the filters will be applied in the sequence mentioned here.
+	 */
+	{
+		EVENT_ALLOW(ARMV8_PMUV3_PERFCTR_INST_RETIRED),
+	},
+	{
+		EVENT_ALLOW(ARMV8_PMUV3_PERFCTR_INST_RETIRED),
+		EVENT_ALLOW(ARMV8_PMUV3_PERFCTR_CPU_CYCLES),
+	},
+	{
+		EVENT_ALLOW(ARMV8_PMUV3_PERFCTR_INST_RETIRED),
+		EVENT_ALLOW(ARMV8_PMUV3_PERFCTR_CPU_CYCLES),
+		EVENT_DENY(ARMV8_PMUV3_PERFCTR_INST_RETIRED),
+	},
+	{
+		EVENT_ALLOW(ARMV8_PMUV3_PERFCTR_INST_RETIRED),
+		EVENT_ALLOW(ARMV8_PMUV3_PERFCTR_CPU_CYCLES),
+		EVENT_DENY(ARMV8_PMUV3_PERFCTR_INST_RETIRED),
+		EVENT_DENY(ARMV8_PMUV3_PERFCTR_CPU_CYCLES),
+	},
+	{
+		EVENT_DENY(ARMV8_PMUV3_PERFCTR_INST_RETIRED),
+		EVENT_DENY(ARMV8_PMUV3_PERFCTR_CPU_CYCLES),
+		EVENT_ALLOW(ARMV8_PMUV3_PERFCTR_CPU_CYCLES),
+		EVENT_ALLOW(ARMV8_PMUV3_PERFCTR_INST_RETIRED),
+	},
+	{
+		EVENT_DENY(ARMV8_PMUV3_PERFCTR_INST_RETIRED),
+		EVENT_ALLOW(ARMV8_PMUV3_PERFCTR_CPU_CYCLES),
+		EVENT_ALLOW(ARMV8_PMUV3_PERFCTR_INST_RETIRED),
+	},
+	{
+		EVENT_DENY(ARMV8_PMUV3_PERFCTR_INST_RETIRED),
+		EVENT_DENY(ARMV8_PMUV3_PERFCTR_CPU_CYCLES),
+	},
+	{
+		EVENT_DENY(ARMV8_PMUV3_PERFCTR_INST_RETIRED),
+	},
+};
+
+static void run_kvm_event_filter_error_tests(void)
+{
+	int ret;
+	struct kvm_vm *vm;
+	struct kvm_vcpu *vcpu;
+	struct vpmu_vm *vpmu_vm;
+	struct kvm_vcpu_init init;
+	struct kvm_pmu_event_filter pmu_event_filter = EVENT_ALLOW(ARMV8_PMUV3_PERFCTR_CPU_CYCLES);
+	struct kvm_device_attr filter_attr = {
+		.group = KVM_ARM_VCPU_PMU_V3_CTRL,
+		.attr = KVM_ARM_VCPU_PMU_V3_FILTER,
+		.addr = (uint64_t) &pmu_event_filter,
+	};
+
+	/* KVM should not allow configuring filters after the PMU is initialized */
+	vpmu_vm = create_vpmu_vm(guest_code, NULL);
+	ret = __vcpu_ioctl(vpmu_vm->vcpu, KVM_SET_DEVICE_ATTR, &filter_attr);
+	TEST_ASSERT(ret == -1 && errno == EBUSY,
+			"Failed to disallow setting an event filter after PMU init");
+	destroy_vpmu_vm(vpmu_vm);
+
+	/* Check for invalid event filter setting */
+	vm = vm_create(1);
+	vm_ioctl(vm, KVM_ARM_PREFERRED_TARGET, &init);
+	init.features[0] |= (1 << KVM_ARM_VCPU_PMU_V3);
+	vcpu = aarch64_vcpu_add(vm, 0, &init, guest_code);
+
+	pmu_event_filter.base_event = UINT16_MAX;
+	pmu_event_filter.nevents = 5;
+	ret = __vcpu_ioctl(vcpu, KVM_SET_DEVICE_ATTR, &filter_attr);
+	TEST_ASSERT(ret == -1 && errno == EINVAL, "Failed check for invalid filter configuration");
+	kvm_vm_free(vm);
+}
+
+static void run_kvm_event_filter_test(void)
+{
+	int i;
+	struct vpmu_vm *vpmu_vm;
+	struct kvm_vm *vm;
+	vm_vaddr_t pmu_filter_gva;
+	size_t pmu_filter_bmap_sz = BITS_TO_LONGS(ARMV8_PMU_MAX_EVENTS) * sizeof(unsigned long);
+
+	guest_data.test_stage = TEST_STAGE_KVM_EVENT_FILTER;
+
+	/* Test for valid filter configurations */
+	for (i = 0; i < ARRAY_SIZE(pmu_event_filters); i++) {
+		vpmu_vm = create_vpmu_vm(guest_code, pmu_event_filters[i]);
+		vm = vpmu_vm->vm;
+
+		pmu_filter_gva = vm_vaddr_alloc(vm, pmu_filter_bmap_sz, KVM_UTIL_MIN_VADDR);
+		memcpy(addr_gva2hva(vm, pmu_filter_gva), vpmu_vm->pmu_filter, pmu_filter_bmap_sz);
+		guest_data.pmu_filter = (unsigned long *) pmu_filter_gva;
+
+		run_vcpu(vpmu_vm->vcpu);
+
+		destroy_vpmu_vm(vpmu_vm);
+	}
+
+	/* Check if KVM is handling the errors correctly */
+	run_kvm_event_filter_error_tests();
+}
+
 static void run_tests(uint64_t pmcr_n)
 {
 	run_counter_access_tests(pmcr_n);
+	run_kvm_event_filter_test();
 }
 
 /*
