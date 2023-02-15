@@ -320,7 +320,8 @@ uint64_t op_end_addr;
 
 struct vpmu_vm {
 	struct kvm_vm *vm;
-	struct kvm_vcpu *vcpu;
+	int nr_vcpus;
+	struct kvm_vcpu **vcpus;
 	int gic_fd;
 	unsigned long *pmu_filter;
 };
@@ -1164,10 +1165,11 @@ set_event_filters(struct kvm_vcpu *vcpu, struct kvm_pmu_event_filter *pmu_event_
 	return pmu_filter;
 }
 
-/* Create a VM that has one vCPU with PMUv3 configured. */
+/* Create a VM that with PMUv3 configured. */
 static struct vpmu_vm *
-create_vpmu_vm(void *guest_code, struct kvm_pmu_event_filter *pmu_event_filters)
+create_vpmu_vm(int nr_vcpus, void *guest_code, struct kvm_pmu_event_filter *pmu_event_filters)
 {
+	int i;
 	struct kvm_vm *vm;
 	struct kvm_vcpu *vcpu;
 	struct kvm_vcpu_init init;
@@ -1187,7 +1189,11 @@ create_vpmu_vm(void *guest_code, struct kvm_pmu_event_filter *pmu_event_filters)
 	vpmu_vm = calloc(1, sizeof(*vpmu_vm));
 	TEST_ASSERT(vpmu_vm, "Failed to allocate vpmu_vm");
 
-	vpmu_vm->vm = vm = vm_create(1);
+	vpmu_vm->vcpus = calloc(nr_vcpus, sizeof(struct kvm_vcpu *));
+	TEST_ASSERT(vpmu_vm->vcpus, "Failed to allocate kvm_vpus");
+	vpmu_vm->nr_vcpus = nr_vcpus;
+
+	vpmu_vm->vm = vm = vm_create(nr_vcpus);
 	vm_init_descriptor_tables(vm);
 	vm_install_exception_handler(vm, VECTOR_IRQ_CURRENT, guest_irq_handler);
 
@@ -1197,26 +1203,35 @@ create_vpmu_vm(void *guest_code, struct kvm_pmu_event_filter *pmu_event_filters)
 					guest_sync_handler);
 	}
 
-	/* Create vCPU with PMUv3 */
+	/* Create vCPUs with PMUv3 */
 	vm_ioctl(vm, KVM_ARM_PREFERRED_TARGET, &init);
 	init.features[0] |= (1 << KVM_ARM_VCPU_PMU_V3);
-	vpmu_vm->vcpu = vcpu = aarch64_vcpu_add(vm, 0, &init, guest_code);
-	vcpu_init_descriptor_tables(vcpu);
-	vpmu_vm->gic_fd = vgic_v3_setup(vm, 1, 64, GICD_BASE_GPA, GICR_BASE_GPA);
 
-	/* Make sure that PMUv3 support is indicated in the ID register */
-	vcpu_get_reg(vcpu, KVM_ARM64_SYS_REG(SYS_ID_AA64DFR0_EL1), &dfr0);
-	pmuver = FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_PMUVER), dfr0);
-	TEST_ASSERT(pmuver != ID_AA64DFR0_PMUVER_IMP_DEF &&
-		    pmuver >= ID_AA64DFR0_PMUVER_8_0,
-		    "Unexpected PMUVER (0x%x) on the vCPU with PMUv3", pmuver);
+	for (i = 0; i < nr_vcpus; i++) {
+		vpmu_vm->vcpus[i] = vcpu = aarch64_vcpu_add(vm, i, &init, guest_code);
+		vcpu_init_descriptor_tables(vcpu);
+	}
 
-	/* Initialize vPMU */
-	if (pmu_event_filters)
-		vpmu_vm->pmu_filter = set_event_filters(vcpu, pmu_event_filters);
+	/* vGIC setup is expected after the vCPUs are created but before the vPMU is initialized */
+	vpmu_vm->gic_fd = vgic_v3_setup(vm, nr_vcpus, 64, GICD_BASE_GPA, GICR_BASE_GPA);
 
-	vcpu_ioctl(vcpu, KVM_SET_DEVICE_ATTR, &irq_attr);
-	vcpu_ioctl(vcpu, KVM_SET_DEVICE_ATTR, &init_attr);
+	for (i = 0; i < nr_vcpus; i++) {
+		vcpu = vpmu_vm->vcpus[i];
+
+		/* Make sure that PMUv3 support is indicated in the ID register */
+		vcpu_get_reg(vcpu, KVM_ARM64_SYS_REG(SYS_ID_AA64DFR0_EL1), &dfr0);
+		pmuver = FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_PMUVER), dfr0);
+		TEST_ASSERT(pmuver != ID_AA64DFR0_PMUVER_IMP_DEF &&
+			pmuver >= ID_AA64DFR0_PMUVER_8_0,
+			"Unexpected PMUVER (0x%x) on the vCPU %d with PMUv3", i, pmuver);
+
+		/* Initialize vPMU */
+		if (pmu_event_filters)
+			vpmu_vm->pmu_filter = set_event_filters(vcpu, pmu_event_filters);
+
+		vcpu_ioctl(vcpu, KVM_SET_DEVICE_ATTR, &irq_attr);
+		vcpu_ioctl(vcpu, KVM_SET_DEVICE_ATTR, &init_attr);
+	}
 
 	return vpmu_vm;
 }
@@ -1227,6 +1242,7 @@ static void destroy_vpmu_vm(struct vpmu_vm *vpmu_vm)
 		bitmap_free(vpmu_vm->pmu_filter);
 	close(vpmu_vm->gic_fd);
 	kvm_vm_free(vpmu_vm->vm);
+	free(vpmu_vm->vcpus);
 	free(vpmu_vm);
 }
 
@@ -1264,8 +1280,8 @@ static void run_counter_access_test(uint64_t pmcr_n)
 	guest_data.expected_pmcr_n = pmcr_n;
 
 	pr_debug("Test with pmcr_n %lu\n", pmcr_n);
-	vpmu_vm = create_vpmu_vm(guest_code, NULL);
-	vcpu = vpmu_vm->vcpu;
+	vpmu_vm = create_vpmu_vm(1, guest_code, NULL);
+	vcpu = vpmu_vm->vcpus[0];
 
 	/* Save the initial sp to restore them later to run the guest again */
 	vcpu_get_reg(vcpu, ARM64_CORE_REG(sp_el1), &sp);
@@ -1309,8 +1325,8 @@ static void run_counter_access_error_test(uint64_t pmcr_n)
 	guest_data.expected_pmcr_n = pmcr_n;
 
 	pr_debug("Error test with pmcr_n %lu (larger than the host)\n", pmcr_n);
-	vpmu_vm = create_vpmu_vm(guest_code, NULL);
-	vcpu = vpmu_vm->vcpu;
+	vpmu_vm = create_vpmu_vm(1, guest_code, NULL);
+	vcpu = vpmu_vm->vcpus[0];
 
 	/* Update the PMCR_EL0.N with @pmcr_n */
 	vcpu_get_reg(vcpu, KVM_ARM64_SYS_REG(SYS_PMCR_EL0), &pmcr_orig);
@@ -1396,8 +1412,8 @@ static void run_kvm_event_filter_error_tests(void)
 	};
 
 	/* KVM should not allow configuring filters after the PMU is initialized */
-	vpmu_vm = create_vpmu_vm(guest_code, NULL);
-	ret = __vcpu_ioctl(vpmu_vm->vcpu, KVM_SET_DEVICE_ATTR, &filter_attr);
+	vpmu_vm = create_vpmu_vm(1, guest_code, NULL);
+	ret = __vcpu_ioctl(vpmu_vm->vcpus[0], KVM_SET_DEVICE_ATTR, &filter_attr);
 	TEST_ASSERT(ret == -1 && errno == EBUSY,
 			"Failed to disallow setting an event filter after PMU init");
 	destroy_vpmu_vm(vpmu_vm);
@@ -1427,14 +1443,14 @@ static void run_kvm_event_filter_test(void)
 
 	/* Test for valid filter configurations */
 	for (i = 0; i < ARRAY_SIZE(pmu_event_filters); i++) {
-		vpmu_vm = create_vpmu_vm(guest_code, pmu_event_filters[i]);
+		vpmu_vm = create_vpmu_vm(1, guest_code, pmu_event_filters[i]);
 		vm = vpmu_vm->vm;
 
 		pmu_filter_gva = vm_vaddr_alloc(vm, pmu_filter_bmap_sz, KVM_UTIL_MIN_VADDR);
 		memcpy(addr_gva2hva(vm, pmu_filter_gva), vpmu_vm->pmu_filter, pmu_filter_bmap_sz);
 		guest_data.pmu_filter = (unsigned long *) pmu_filter_gva;
 
-		run_vcpu(vpmu_vm->vcpu);
+		run_vcpu(vpmu_vm->vcpus[0]);
 
 		destroy_vpmu_vm(vpmu_vm);
 	}
@@ -1449,8 +1465,8 @@ static void run_kvm_evtype_filter_test(void)
 
 	guest_data.test_stage = TEST_STAGE_KVM_EVTYPE_FILTER;
 
-	vpmu_vm = create_vpmu_vm(guest_code, NULL);
-	run_vcpu(vpmu_vm->vcpu);
+	vpmu_vm = create_vpmu_vm(1, guest_code, NULL);
+	run_vcpu(vpmu_vm->vcpus[0]);
 	destroy_vpmu_vm(vpmu_vm);
 }
 
@@ -1465,7 +1481,7 @@ static void *run_vcpus_migrate_test_func(void *arg)
 	struct vcpu_migrate_data *migrate_data = arg;
 	struct vpmu_vm *vpmu_vm = migrate_data->vpmu_vm;
 
-	run_vcpu(vpmu_vm->vcpu);
+	run_vcpu(vpmu_vm->vcpus[0]);
 	migrate_data->vcpu_done = true;
 
 	return NULL;
@@ -1535,7 +1551,7 @@ static void run_vcpu_migration_test(uint64_t pmcr_n)
 	guest_data.test_stage = TEST_STAGE_VCPU_MIGRATION;
 	guest_data.expected_pmcr_n = pmcr_n;
 
-	migrate_data.vpmu_vm = vpmu_vm = create_vpmu_vm(guest_code, NULL);
+	migrate_data.vpmu_vm = vpmu_vm = create_vpmu_vm(1, guest_code, NULL);
 
 	/* Initialize random number generation for migrating vCPUs to random pCPUs */
 	srand(time(NULL));
@@ -1571,8 +1587,8 @@ static uint64_t get_pmcr_n_limit(void)
 	struct vpmu_vm *vpmu_vm;
 	uint64_t pmcr;
 
-	vpmu_vm = create_vpmu_vm(guest_code, NULL);
-	vcpu_get_reg(vpmu_vm->vcpu, KVM_ARM64_SYS_REG(SYS_PMCR_EL0), &pmcr);
+	vpmu_vm = create_vpmu_vm(1, guest_code, NULL);
+	vcpu_get_reg(vpmu_vm->vcpus[0], KVM_ARM64_SYS_REG(SYS_PMCR_EL0), &pmcr);
 	destroy_vpmu_vm(vpmu_vm);
 
 	return FIELD_GET(ARMV8_PMU_PMCR_N, pmcr);
