@@ -18,9 +18,87 @@
 
 #include "sys_regs.h"
 
+/*
+ * Number of entries in id_reg_desc's ftr_bits[] (Number of 4 bits fields
+ * in 64 bit register + 1 entry for a terminator entry).
+ */
+#define	FTR_FIELDS_NUM	17
+
 struct id_reg_desc {
 	const struct sys_reg_desc	reg_desc;
+	/*
+	 * KVM sanitised ID register value.
+	 * It is the default value for per VM emulated ID register.
+	 */
+	u64 kvm_sys_val;
+	/*
+	 * Used to validate the ID register values with arm64_check_features().
+	 * The last item in the array must be terminated by an item whose
+	 * width field is zero as that is expected by arm64_check_features().
+	 * Only feature bits defined in this array are writable.
+	 */
+	struct arm64_ftr_bits	ftr_bits[FTR_FIELDS_NUM];
+
+	/*
+	 * Basically init() is used to setup the KVM sanitised value
+	 * stored in kvm_sys_val.
+	 */
+	void (*init)(struct id_reg_desc *idr);
 };
+
+static struct id_reg_desc id_reg_descs[];
+
+/**
+ * arm64_check_features() - Check if a feature register value constitutes
+ * a subset of features indicated by @limit.
+ *
+ * @ftrp: Pointer to an array of arm64_ftr_bits. It must be terminated by
+ * an item whose width field is zero.
+ * @val: The feature register value to check
+ * @limit: The limit value of the feature register
+ *
+ * This function will check if each feature field of @val is the "safe" value
+ * against @limit based on @ftrp[], each of which specifies the target field
+ * (shift, width), whether or not the field is for a signed value (sign),
+ * how the field is determined to be "safe" (type), and the safe value
+ * (safe_val) when type == FTR_EXACT (safe_val won't be used by this
+ * function when type != FTR_EXACT). Any other fields in arm64_ftr_bits
+ * won't be used by this function. If a field value in @val is the same
+ * as the one in @limit, it is always considered the safe value regardless
+ * of the type. For register fields that are not in @ftrp[], only the value
+ * in @limit is considered the safe value.
+ *
+ * Return: 0 if all the fields are safe. Otherwise, return negative errno.
+ */
+static int arm64_check_features(const struct arm64_ftr_bits *ftrp, u64 val, u64 limit)
+{
+	u64 mask = 0;
+
+	for (; ftrp->width; ftrp++) {
+		s64 f_val, f_lim, safe_val;
+
+		f_val = arm64_ftr_value(ftrp, val);
+		f_lim = arm64_ftr_value(ftrp, limit);
+		mask |= arm64_ftr_mask(ftrp);
+
+		if (f_val == f_lim)
+			safe_val = f_val;
+		else
+			safe_val = arm64_ftr_safe_value(ftrp, f_val, f_lim);
+
+		if (safe_val != f_val)
+			return -E2BIG;
+	}
+
+	/*
+	 * For fields that are not indicated in ftrp, values in limit are the
+	 * safe values.
+	 */
+	if ((val & ~mask) != (limit & ~mask))
+		return -E2BIG;
+
+	return 0;
+}
 
 static u8 vcpu_pmuver(const struct kvm_vcpu *vcpu)
 {
@@ -67,7 +145,6 @@ u64 kvm_arm_read_id_reg_with_encoding(const struct kvm_vcpu *vcpu, u32 id)
 	case SYS_ID_AA64PFR0_EL1:
 		if (!vcpu_has_sve(vcpu))
 			val &= ~ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_SVE);
-		val &= ~ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_AMU);
 		if (kvm_vgic_global_state.type == VGIC_V3) {
 			val &= ~ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_GIC);
 			val |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_GIC), 1);
@@ -94,15 +171,10 @@ u64 kvm_arm_read_id_reg_with_encoding(const struct kvm_vcpu *vcpu, u32 id)
 			val &= ~ARM64_FEATURE_MASK(ID_AA64ISAR2_EL1_WFxT);
 		break;
 	case SYS_ID_AA64DFR0_EL1:
-		/* Limit debug to ARMv8.0 */
-		val &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_DebugVer);
-		val |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_DebugVer), 6);
 		/* Set PMUver to the required version */
 		val &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer);
 		val |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer),
 				  vcpu_pmuver(vcpu));
-		/* Hide SPE from guests */
-		val &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMSVer);
 		break;
 	case SYS_ID_DFR0_EL1:
 		val &= ~ARM64_FEATURE_MASK(ID_DFR0_EL1_PerfMon);
@@ -161,9 +233,15 @@ static int get_id_reg(struct kvm_vcpu *vcpu, const struct sys_reg_desc *rd,
 static int set_id_reg(struct kvm_vcpu *vcpu, const struct sys_reg_desc *rd,
 		      u64 val)
 {
-	/* This is what we mean by invariant: you can't change it. */
-	if (val != read_id_reg(vcpu, rd))
-		return -EINVAL;
+	int ret;
+	int id = reg_to_encoding(rd);
+
+	ret = arm64_check_features(id_reg_descs[IDREG_IDX(id)].ftr_bits, val,
+				   id_reg_descs[IDREG_IDX(id)].kvm_sys_val);
+	if (ret)
+		return ret;
+
+	IDREG(vcpu->kvm, id) = val;
 
 	return 0;
 }
@@ -197,12 +275,47 @@ static unsigned int aa32_id_visibility(const struct kvm_vcpu *vcpu,
 	return id_visibility(vcpu, r);
 }
 
+static void init_id_reg(struct id_reg_desc *idr)
+{
+	idr->kvm_sys_val = read_sanitised_ftr_reg(reg_to_encoding(&idr->reg_desc));
+}
+
+static void init_id_aa64pfr0_el1(struct id_reg_desc *idr)
+{
+	u64 val;
+	u32 id = reg_to_encoding(&idr->reg_desc);
+
+	val = read_sanitised_ftr_reg(id);
+	/*
+	 * The default is to expose CSV2 == 1 if the HW isn't affected.
+	 * Although this is a per-CPU feature, we make it global because
+	 * asymmetric systems are just a nuisance.
+	 *
+	 * Userspace can override this as long as it doesn't promise
+	 * the impossible.
+	 */
+	if (arm64_get_spectre_v2_state() == SPECTRE_UNAFFECTED) {
+		val &= ~ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV2);
+		val |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV2), 1);
+	}
+	if (arm64_get_meltdown_state() == SPECTRE_UNAFFECTED) {
+		val &= ~ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV3);
+		val |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV3), 1);
+	}
+
+	val &= ~ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_AMU);
+
+	val &= ~ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_GIC);
+	val |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_GIC), 1);
+
+	idr->kvm_sys_val = val;
+}
+
 static int set_id_aa64pfr0_el1(struct kvm_vcpu *vcpu,
 			       const struct sys_reg_desc *rd,
 			       u64 val)
 {
 	u8 csv2, csv3;
-	u64 sval = val;
 
 	/*
 	 * Allow AA64PFR0_EL1.CSV2 to be set from userspace as long as
@@ -220,16 +333,29 @@ static int set_id_aa64pfr0_el1(struct kvm_vcpu *vcpu,
 	    (csv3 && arm64_get_meltdown_state() != SPECTRE_UNAFFECTED))
 		return -EINVAL;
 
-	/* We can only differ with CSV[23], and anything else is an error */
-	val ^= read_id_reg(vcpu, rd);
-	val &= ~(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV2) |
-		 ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV3));
-	if (val)
-		return -EINVAL;
+	return set_id_reg(vcpu, rd, val);
+}
 
-	IDREG_RD(vcpu->kvm, rd) = sval;
+static void init_id_aa64dfr0_el1(struct id_reg_desc *idr)
+{
+	u64 val;
+	u32 id = reg_to_encoding(&idr->reg_desc);
 
-	return 0;
+	val = read_sanitised_ftr_reg(id);
+	/* Limit debug to ARMv8.0 */
+	val &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_DebugVer);
+	val |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_DebugVer), 6);
+	/*
+	 * Initialise the default PMUver before there is a chance to
+	 * create an actual PMU.
+	 */
+	val &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer);
+	val |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer),
+			  kvm_arm_pmu_get_pmuver_limit());
+	/* Hide SPE from guests */
+	val &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMSVer);
+
+	idr->kvm_sys_val = val;
 }
 
 static int set_id_aa64dfr0_el1(struct kvm_vcpu *vcpu,
@@ -238,6 +364,7 @@ static int set_id_aa64dfr0_el1(struct kvm_vcpu *vcpu,
 {
 	u8 pmuver, host_pmuver;
 	bool valid_pmu;
+	int ret;
 
 	host_pmuver = kvm_arm_pmu_get_pmuver_limit();
 
@@ -257,27 +384,46 @@ static int set_id_aa64dfr0_el1(struct kvm_vcpu *vcpu,
 	if (kvm_vcpu_has_pmu(vcpu) != valid_pmu)
 		return -EINVAL;
 
-	/* We can only differ with PMUver, and anything else is an error */
-	val ^= read_id_reg(vcpu, rd);
-	val &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer);
-	if (val)
-		return -EINVAL;
-
 	if (valid_pmu) {
-		IDREG(vcpu->kvm, SYS_ID_AA64DFR0_EL1) &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer);
-		IDREG(vcpu->kvm, SYS_ID_AA64DFR0_EL1) |=
-			FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer), pmuver);
+		ret = set_id_reg(vcpu, rd, val);
+		if (ret)
+			return ret;
 
 		IDREG(vcpu->kvm, SYS_ID_DFR0_EL1) &= ~ARM64_FEATURE_MASK(ID_DFR0_EL1_PerfMon);
 		IDREG(vcpu->kvm, SYS_ID_DFR0_EL1) |=
 			FIELD_PREP(ARM64_FEATURE_MASK(ID_DFR0_EL1_PerfMon), pmuver);
-	} else if (pmuver == ID_AA64DFR0_EL1_PMUVer_IMP_DEF) {
-		set_bit(KVM_ARCH_FLAG_VCPU_HAS_IMP_DEF_PMU, &vcpu->kvm->arch.flags);
 	} else {
-		clear_bit(KVM_ARCH_FLAG_VCPU_HAS_IMP_DEF_PMU, &vcpu->kvm->arch.flags);
+		/* We can only differ with PMUver, and anything else is an error */
+		val ^= read_id_reg(vcpu, rd);
+		val &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer);
+		if (val)
+			return -EINVAL;
+
+		if (pmuver == ID_AA64DFR0_EL1_PMUVer_IMP_DEF)
+			set_bit(KVM_ARCH_FLAG_VCPU_HAS_IMP_DEF_PMU, &vcpu->kvm->arch.flags);
+		else
+			clear_bit(KVM_ARCH_FLAG_VCPU_HAS_IMP_DEF_PMU, &vcpu->kvm->arch.flags);
+
 	}
 
 	return 0;
+}
+
+static void init_id_dfr0_el1(struct id_reg_desc *idr)
+{
+	u64 val;
+	u32 id = reg_to_encoding(&idr->reg_desc);
+
+	val = read_sanitised_ftr_reg(id);
+	/*
+	 * Initialise the default PMUver before there is a chance to
+	 * create an actual PMU.
+	 */
+	val &= ~ARM64_FEATURE_MASK(ID_DFR0_EL1_PerfMon);
+	val |= FIELD_PREP(ARM64_FEATURE_MASK(ID_DFR0_EL1_PerfMon),
+			  kvm_arm_pmu_get_pmuver_limit());
+
+	idr->kvm_sys_val = val;
 }
 
 static int set_id_dfr0_el1(struct kvm_vcpu *vcpu,
@@ -286,6 +432,7 @@ static int set_id_dfr0_el1(struct kvm_vcpu *vcpu,
 {
 	u8 perfmon, host_perfmon;
 	bool valid_pmu;
+	int ret;
 
 	host_perfmon = pmuver_to_perfmon(kvm_arm_pmu_get_pmuver_limit());
 
@@ -306,38 +453,43 @@ static int set_id_dfr0_el1(struct kvm_vcpu *vcpu,
 	if (kvm_vcpu_has_pmu(vcpu) != valid_pmu)
 		return -EINVAL;
 
-	/* We can only differ with PerfMon, and anything else is an error */
-	val ^= read_id_reg(vcpu, rd);
-	val &= ~ARM64_FEATURE_MASK(ID_DFR0_EL1_PerfMon);
-	if (val)
-		return -EINVAL;
-
 	if (valid_pmu) {
-		IDREG(vcpu->kvm, SYS_ID_DFR0_EL1) &= ~ARM64_FEATURE_MASK(ID_DFR0_EL1_PerfMon);
-		IDREG(vcpu->kvm, SYS_ID_DFR0_EL1) |= FIELD_PREP(
-			ARM64_FEATURE_MASK(ID_DFR0_EL1_PerfMon), perfmon_to_pmuver(perfmon));
+		ret = set_id_reg(vcpu, rd, val);
+		if (ret)
+			return ret;
 
 		IDREG(vcpu->kvm, SYS_ID_AA64DFR0_EL1) &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer);
 		IDREG(vcpu->kvm, SYS_ID_AA64DFR0_EL1) |= FIELD_PREP(
 			ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer), perfmon_to_pmuver(perfmon));
-	} else if (perfmon == ID_DFR0_EL1_PerfMon_IMPDEF) {
-		set_bit(KVM_ARCH_FLAG_VCPU_HAS_IMP_DEF_PMU, &vcpu->kvm->arch.flags);
 	} else {
-		clear_bit(KVM_ARCH_FLAG_VCPU_HAS_IMP_DEF_PMU, &vcpu->kvm->arch.flags);
+		/* We can only differ with PerfMon, and anything else is an error */
+		val ^= read_id_reg(vcpu, rd);
+		val &= ~ARM64_FEATURE_MASK(ID_DFR0_EL1_PerfMon);
+		if (val)
+			return -EINVAL;
+
+		if (perfmon == ID_DFR0_EL1_PerfMon_IMPDEF)
+			set_bit(KVM_ARCH_FLAG_VCPU_HAS_IMP_DEF_PMU, &vcpu->kvm->arch.flags);
+		else
+			clear_bit(KVM_ARCH_FLAG_VCPU_HAS_IMP_DEF_PMU, &vcpu->kvm->arch.flags);
 	}
 
 	return 0;
 }
 
 /* sys_reg_desc initialiser for known cpufeature ID registers */
+#define SYS_DESC_SANITISED(name) {			\
+	SYS_DESC(SYS_##name),				\
+	.access	= access_id_reg,			\
+	.get_user = get_id_reg,				\
+	.set_user = set_id_reg,				\
+	.visibility = id_visibility,			\
+}
+
 #define ID_SANITISED(name) {				\
-	.reg_desc = {					\
-		SYS_DESC(SYS_##name),			\
-		.access	= access_id_reg,		\
-		.get_user = get_id_reg,			\
-		.set_user = set_id_reg,			\
-		.visibility = id_visibility,		\
-	},						\
+	.reg_desc = SYS_DESC_SANITISED(name),		\
+	.ftr_bits = { ARM64_FTR_END, },			\
+	.init = init_id_reg,				\
 }
 
 /* sys_reg_desc initialiser for known cpufeature ID registers */
@@ -349,6 +501,8 @@ static int set_id_dfr0_el1(struct kvm_vcpu *vcpu,
 		.set_user = set_id_reg,			\
 		.visibility = aa32_id_visibility,	\
 	},						\
+	.ftr_bits = { ARM64_FTR_END, },			\
+	.init = init_id_reg,				\
 }
 
 /*
@@ -364,6 +518,7 @@ static int set_id_dfr0_el1(struct kvm_vcpu *vcpu,
 		.set_user = set_id_reg,				\
 		.visibility = raz_visibility			\
 	},							\
+	.ftr_bits = { ARM64_FTR_END, },				\
 }
 
 /*
@@ -379,9 +534,10 @@ static int set_id_dfr0_el1(struct kvm_vcpu *vcpu,
 		.set_user = set_id_reg,			\
 		.visibility = raz_visibility,		\
 	},						\
+	.ftr_bits = { ARM64_FTR_END, },			\
 }
 
-static const struct id_reg_desc id_reg_descs[KVM_ARM_ID_REG_NUM] = {
+static struct id_reg_desc id_reg_descs[KVM_ARM_ID_REG_NUM] = {
 	/*
 	 * ID regs: all ID_SANITISED() entries here must have corresponding
 	 * entries in arm64_ftr_regs[].
@@ -397,6 +553,11 @@ static const struct id_reg_desc id_reg_descs[KVM_ARM_ID_REG_NUM] = {
 		.get_user = get_id_reg,
 		.set_user = set_id_dfr0_el1,
 		.visibility = aa32_id_visibility, },
+	  .ftr_bits = {
+		ARM64_FTR_BITS(FTR_VISIBLE, FTR_STRICT, FTR_LOWER_SAFE,
+			ID_DFR0_EL1_PerfMon_SHIFT, ID_DFR0_EL1_PerfMon_WIDTH, 0),
+		ARM64_FTR_END, },
+	  .init = init_id_dfr0_el1,
 	},
 	ID_HIDDEN(ID_AFR0_EL1),
 	AA32_ID_SANITISED(ID_MMFR0_EL1),
@@ -431,6 +592,13 @@ static const struct id_reg_desc id_reg_descs[KVM_ARM_ID_REG_NUM] = {
 		.access = access_id_reg,
 		.get_user = get_id_reg,
 		.set_user = set_id_aa64pfr0_el1, },
+	  .ftr_bits = {
+		ARM64_FTR_BITS(FTR_VISIBLE, FTR_STRICT, FTR_LOWER_SAFE,
+			ID_AA64PFR0_EL1_CSV2_SHIFT, ID_AA64PFR0_EL1_CSV2_WIDTH, 0),
+		ARM64_FTR_BITS(FTR_VISIBLE, FTR_STRICT, FTR_LOWER_SAFE,
+			ID_AA64PFR0_EL1_CSV3_SHIFT, ID_AA64PFR0_EL1_CSV3_WIDTH, 0),
+		ARM64_FTR_END, },
+	  .init = init_id_aa64pfr0_el1,
 	},
 	ID_SANITISED(ID_AA64PFR1_EL1),
 	ID_UNALLOCATED(4, 2),
@@ -446,6 +614,11 @@ static const struct id_reg_desc id_reg_descs[KVM_ARM_ID_REG_NUM] = {
 		.access = access_id_reg,
 		.get_user = get_id_reg,
 		.set_user = set_id_aa64dfr0_el1, },
+	  .ftr_bits = {
+		ARM64_FTR_BITS(FTR_VISIBLE, FTR_STRICT, FTR_LOWER_SAFE,
+			ID_AA64DFR0_EL1_PMUVer_SHIFT, ID_AA64DFR0_EL1_PMUVer_WIDTH, 0),
+		ARM64_FTR_END, },
+	  .init = init_id_aa64dfr0_el1,
 	},
 	ID_SANITISED(ID_AA64DFR1_EL1),
 	ID_UNALLOCATED(5, 2),
@@ -575,7 +748,7 @@ int kvm_arm_set_id_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 	return ret;
 }
 
-bool kvm_arm_check_idreg_table(void)
+bool kvm_arm_idreg_table_init(void)
 {
 	unsigned int i;
 
@@ -587,6 +760,9 @@ bool kvm_arm_check_idreg_table(void)
 				&id_reg_descs[i].reg_desc, i);
 			return false;
 		}
+
+		if (id_reg_descs[i].init)
+			id_reg_descs[i].init(&id_reg_descs[i]);
 	}
 
 	return true;
@@ -610,55 +786,16 @@ int kvm_arm_walk_id_regs(struct kvm_vcpu *vcpu, u64 __user *uind)
 }
 
 /*
- * Set the guest's ID registers that are defined in id_reg_descs[]
- * with ID_SANITISED() to the host's sanitized value.
+ * Initialize the guest's ID registers with KVM sanitised values that were setup
+ * during ID register descriptors initialization.
  */
-void kvm_arm_set_default_id_regs(struct kvm *kvm)
+void kvm_arm_init_id_regs(struct kvm *kvm)
 {
 	int i;
 	u32 id;
-	u64 val;
 
 	for (i = 0; i < ARRAY_SIZE(id_reg_descs); i++) {
 		id = reg_to_encoding(&id_reg_descs[i].reg_desc);
-		if (WARN_ON_ONCE(!is_id_reg(id)))
-			/* Shouldn't happen */
-			continue;
-
-		if (id_reg_descs[i].reg_desc.visibility == raz_visibility)
-			/* Hidden or reserved ID register */
-			continue;
-
-		val = read_sanitised_ftr_reg(id);
-		IDREG(kvm, id) = val;
+		IDREG(kvm, id) = id_reg_descs[i].kvm_sys_val;
 	}
-	/*
-	 * The default is to expose CSV2 == 1 if the HW isn't affected.
-	 * Although this is a per-CPU feature, we make it global because
-	 * asymmetric systems are just a nuisance.
-	 *
-	 * Userspace can override this as long as it doesn't promise
-	 * the impossible.
-	 */
-	val = IDREG(kvm, SYS_ID_AA64PFR0_EL1);
-
-	if (arm64_get_spectre_v2_state() == SPECTRE_UNAFFECTED) {
-		val &= ~ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV2);
-		val |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV2), 1);
-	}
-	if (arm64_get_meltdown_state() == SPECTRE_UNAFFECTED) {
-		val &= ~ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV3);
-		val |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV3), 1);
-	}
-
-	IDREG(kvm, SYS_ID_AA64PFR0_EL1) = val;
-
-	/*
-	 * Initialise the default PMUver before there is a chance to
-	 * create an actual PMU.
-	 */
-	IDREG(kvm, SYS_ID_AA64DFR0_EL1) &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer);
-	IDREG(kvm, SYS_ID_AA64DFR0_EL1) |=
-		FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer),
-			   kvm_arm_pmu_get_pmuver_limit());
 }

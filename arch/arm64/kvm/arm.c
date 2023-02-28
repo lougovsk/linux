@@ -135,7 +135,7 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 	/* The maximum number of VCPUs is limited by the host's GIC model */
 	kvm->max_vcpus = kvm_arm_default_max_vcpus();
 
-	kvm_arm_set_default_id_regs(kvm);
+	kvm_arm_init_id_regs(kvm);
 	kvm_arm_init_hypercalls(kvm);
 
 	return 0;
