@@ -106,12 +106,13 @@ static void vgic_mmio_write_v3_misc(struct kvm_vcpu *vcpu,
 				    unsigned long val)
 {
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
+	struct kvm *kvm = vcpu->kvm;
 
 	switch (addr & 0x0c) {
 	case GICD_CTLR: {
 		bool was_enabled, is_hwsgi;
 
-		mutex_lock(&vcpu->kvm->lock);
+		mutex_lock(&kvm->arch.lock);
 
 		was_enabled = dist->enabled;
 		is_hwsgi = dist->nassgireq;
@@ -139,7 +140,7 @@ static void vgic_mmio_write_v3_misc(struct kvm_vcpu *vcpu,
 		else if (!was_enabled && dist->enabled)
 			vgic_kick_vcpus(vcpu->kvm);
 
-		mutex_unlock(&vcpu->kvm->lock);
+		mutex_unlock(&kvm->arch.lock);
 		break;
 	}
 	case GICD_TYPER:
