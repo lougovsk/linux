@@ -264,14 +264,16 @@ int kvm_reset_vcpu(struct kvm_vcpu *vcpu)
 
 	mutex_lock(&vcpu->kvm->lock);
 	ret = kvm_set_vm_width(vcpu);
-	if (!ret) {
-		reset_state = vcpu->arch.reset_state;
-		WRITE_ONCE(vcpu->arch.reset_state.reset, false);
-	}
 	mutex_unlock(&vcpu->kvm->lock);
 
 	if (ret)
 		return ret;
+
+	reset_state = vcpu->arch.reset_state;
+
+	/* Ensure reset_state is read before clearing the pending state */
+	smp_rmb();
+	WRITE_ONCE(vcpu->arch.reset_state.reset, false);
 
 	/* Reset PMU outside of the non-preemptible section */
 	kvm_pmu_vcpu_reset(vcpu);
