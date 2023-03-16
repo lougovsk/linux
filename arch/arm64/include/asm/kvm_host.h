@@ -185,6 +185,9 @@ struct kvm_protected_vm {
 };
 
 struct kvm_arch {
+	/* Protects VM-scoped configuration data */
+	struct mutex config_lock;
+
 	struct kvm_s2_mmu mmu;
 
 	/* VTCR_EL2 value for this VM */
