@@ -23,7 +23,7 @@ struct vgic_global kvm_vgic_global_state __ro_after_init = {
 
 /*
  * Locking order is always:
- * kvm->lock (mutex)
+ * kvm->arch.config_lock (mutex)
  *   its->cmd_lock (mutex)
  *     its->its_lock (mutex)
  *       vgic_cpu->ap_list_lock		must be taken with IRQs disabled
