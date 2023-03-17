@@ -210,6 +210,35 @@ find_reg(const struct sys_reg_params *params, const struct sys_reg_desc table[],
 	return __inline_bsearch((void *)pval, table, num, sizeof(table[0]), match_sys_reg);
 }
 
+static inline unsigned int raz_visibility(const struct kvm_vcpu *vcpu,
+					  const struct sys_reg_desc *r)
+{
+	return REG_RAZ;
+}
+
+static inline bool write_to_read_only(struct kvm_vcpu *vcpu,
+				      struct sys_reg_params *params,
+				      const struct sys_reg_desc *r)
+{
+	WARN_ONCE(1, "Unexpected sys_reg write to read-only register\n");
+	print_sys_reg_instr(params);
+	kvm_inject_undefined(vcpu);
+	return false;
+}
+
+/*
+ * Return true if the register's (Op0, Op1, CRn, CRm, Op2) is
+ * (3, 0, 0, crm, op2), where 1<=crm<8, 0<=op2<8.
+ */
+static inline bool is_id_reg(u32 id)
+{
+	return (sys_reg_Op0(id) == 3 && sys_reg_Op1(id) == 0 &&
+		sys_reg_CRn(id) == 0 && sys_reg_CRm(id) >= 1 &&
+		sys_reg_CRm(id) < 8);
+}
+
+void perform_access(struct kvm_vcpu *vcpu, struct sys_reg_params *params,
+		    const struct sys_reg_desc *r);
 const struct sys_reg_desc *get_reg_by_id(u64 id,
 					 const struct sys_reg_desc table[],
 					 unsigned int num);
@@ -220,6 +249,18 @@ int kvm_sys_reg_get_user(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg,
 			 const struct sys_reg_desc table[], unsigned int num);
 int kvm_sys_reg_set_user(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg,
 			 const struct sys_reg_desc table[], unsigned int num);
+bool check_sysreg_table(const struct sys_reg_desc *table, unsigned int n,
+			bool is_32);
+int walk_one_sys_reg(const struct kvm_vcpu *vcpu,
+		     const struct sys_reg_desc *rd,
+		     u64 __user **uind,
+		     unsigned int *total);
+int emulate_id_reg(struct kvm_vcpu *vcpu, struct sys_reg_params *params);
+void kvm_arm_reset_id_regs(struct kvm_vcpu *vcpu);
+int kvm_arm_get_id_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg);
+int kvm_arm_set_id_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg);
+bool kvm_arm_check_idreg_table(void);
+int kvm_arm_walk_id_regs(struct kvm_vcpu *vcpu, u64 __user *uind);
 
 #define AA32(_x)	.aarch32_map = AA32_##_x
 #define Op0(_x) 	.Op0 = _x
