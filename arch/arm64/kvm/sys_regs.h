@@ -239,6 +239,7 @@ static inline bool is_id_reg(u32 id)
 
 void perform_access(struct kvm_vcpu *vcpu, struct sys_reg_params *params,
 		    const struct sys_reg_desc *r);
+bool index_to_params(u64 id, struct sys_reg_params *params);
 const struct sys_reg_desc *get_reg_by_id(u64 id,
 					 const struct sys_reg_desc table[],
 					 unsigned int num);
