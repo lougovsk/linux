@@ -180,6 +180,19 @@ static u8 kvm_smccc_get_action(struct kvm_vcpu *vcpu, u32 func_id)
 	return KVM_SMCCC_FILTER_DENY;
 }
 
+static void kvm_prepare_hypercall_exit(struct kvm_vcpu *vcpu, u32 func_id)
+{
+	u8 ec = ESR_ELx_EC(kvm_vcpu_get_esr(vcpu));
+	struct kvm_run *run = vcpu->run;
+
+	run->exit_reason = KVM_EXIT_HYPERCALL;
+	run->hypercall.nr = func_id;
+	run->hypercall.flags = 0;
+
+	if (ec == ESR_ELx_EC_SMC32 || ec == ESR_ELx_EC_SMC64)
+		run->hypercall.flags |= KVM_HYPERCALL_EXIT_SMC;
+}
+
 int kvm_smccc_call_handler(struct kvm_vcpu *vcpu)
 {
 	struct kvm_smccc_features *smccc_feat = &vcpu->kvm->arch.smccc_feat;
@@ -192,6 +205,10 @@ int kvm_smccc_call_handler(struct kvm_vcpu *vcpu)
 	action = kvm_smccc_get_action(vcpu, func_id);
 	if (action == KVM_SMCCC_FILTER_DENY)
 		goto out;
+	if (action == KVM_SMCCC_FILTER_FWD_TO_USER) {
+		kvm_prepare_hypercall_exit(vcpu, func_id);
+		return 0;
+	}
 
 	switch (func_id) {
 	case ARM_SMCCC_VERSION_FUNC_ID:
@@ -206,6 +223,8 @@ int kvm_smccc_call_handler(struct kvm_vcpu *vcpu)
 				break;
 			case SPECTRE_MITIGATED:
 				val[0] = SMCCC_RET_SUCCESS;
+	kvm_incr_pc(vcpu);
+
 				break;
 			case SPECTRE_UNAFFECTED:
 				val[0] = SMCCC_ARCH_WORKAROUND_RET_UNAFFECTED;
