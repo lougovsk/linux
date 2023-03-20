@@ -559,4 +559,13 @@ struct kvm_pmu_event_filter {
 #define KVM_VCPU_TSC_CTRL 0 /* control group for the timestamp counter (TSC) */
 #define   KVM_VCPU_TSC_OFFSET 0 /* attribute for the TSC offset */
 
+/*
+ * x86-specific KVM_EXIT_HYPERCALL flags.
+ *
+ * KVM previously used a u32 field to indicate the hypercall was initiated from
+ * long mode. As such, the lower 32 bits of the flags are used for long mode to
+ * preserve ABI.
+ */
+#define KVM_EXIT_HYPERCALL_LONG_MODE	GENMASK_ULL(31, 0)
+
 #endif /* _ASM_X86_KVM_H */
