@@ -29,6 +29,16 @@ u64 id_aa64mmfr2_el1_sys_val;
 u64 id_aa64smfr0_el1_sys_val;
 
 /*
+ * Track whether the system isn't affected by spectre/meltown.
+ * Although this is per-CPU, we make it global for simplicity, e.g., not to have
+ * to worry about migration.
+ *
+ * Unlike for non-protected VMs, userspace cannot override this.
+ */
+bool spectre_unaffected;
+bool meltdown_unaffected;
+
+/*
  * Inject an unknown/undefined exception to an AArch64 guest while most of its
  * sysregs are live.
  */
@@ -85,7 +95,6 @@ static u64 get_restricted_features_unsigned(u64 sys_reg_val,
 
 static u64 get_pvm_id_aa64pfr0(const struct kvm_vcpu *vcpu)
 {
-	const struct kvm *kvm = (const struct kvm *)kern_hyp_va(vcpu->kvm);
 	u64 set_mask = 0;
 	u64 allow_mask = PVM_ID_AA64PFR0_ALLOW;
 
@@ -94,9 +103,9 @@ static u64 get_pvm_id_aa64pfr0(const struct kvm_vcpu *vcpu)
 
 	/* Spectre and Meltdown mitigation in KVM */
 	set_mask |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV2),
-			       (u64)kvm->arch.pfr0_csv2);
+			       spectre_unaffected);
 	set_mask |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV3),
-			       (u64)kvm->arch.pfr0_csv3);
+			       meltdown_unaffected);
 
 	return (id_aa64pfr0_el1_sys_val & allow_mask) | set_mask;
 }
