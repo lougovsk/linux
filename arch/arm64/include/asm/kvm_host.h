@@ -544,6 +544,9 @@ struct kvm_vcpu_arch {
 
 	/* Per-vcpu CCSIDR override or NULL */
 	u32 *ccsidr;
+
+	/* the value of host's pmuserenr_el0 before guest entry */
+	u64	host_pmuserenr_el0;
 };
 
 /*
