@@ -129,6 +129,13 @@ void __kvm_flush_cpu_context(struct kvm_s2_mmu *mmu)
 {
 	struct tlb_inv_context cxt;
 
+	/*
+	 * We're about to restore some guest MMU state. Make sure
+	 * ongoing page-table walks that have started before we
+	 * trapped to EL2 have completed.
+	 */
+	dsb(nsh);
+
 	/* Switch to requested VMID */
 	__tlb_switch_to_guest(mmu, &cxt);
 
