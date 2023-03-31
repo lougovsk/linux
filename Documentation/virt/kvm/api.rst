@@ -8380,6 +8380,14 @@ structure.
 When getting the Modified Change Topology Report value, the attr->addr
 must point to a byte where the value will be stored or retrieved from.
 
+8.40 KVM_CAP_GET_CUR_CPUFREQ
+------------------------
+
+:Architectures: arm64
+
+This capability indicates that KVM supports getting the
+frequency of the current CPU that the vCPU thread is running on.
+
 9. Known KVM API problems
 =========================
 
