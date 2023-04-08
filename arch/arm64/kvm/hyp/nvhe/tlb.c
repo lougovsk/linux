@@ -17,6 +17,23 @@ struct tlb_inv_context {
 static void __tlb_switch_to_guest(struct kvm_s2_mmu *mmu,
 				  struct tlb_inv_context *cxt)
 {
+	/*
+	 * We have two requirements:
+	 *
+	 * - ensure that the page table updates are visible to all
+         *   CPUs, for which a dsb(ishst) is what we need
+	 *
+	 * - complete any speculative page table walk started before
+         *   we trapped to EL2 so that we can mess with the MM
+         *   registers out of context, for which dsb(nsh) is enough
+	 *
+	 * The composition of these two barriers is a dsb(ish). This
+	 * might be slightly over the top for non-shareable TLBIs, but
+	 * they are so vanishingly rare that it isn't worth the
+	 * complexity.
+	 */
+	dsb(ish);
+
 	if (cpus_have_final_cap(ARM64_WORKAROUND_SPECULATIVE_AT)) {
 		u64 val;
 
@@ -59,8 +76,6 @@ void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu,
 			      phys_addr_t ipa, int level)
 {
 	struct tlb_inv_context cxt;
-
-	dsb(ishst);
 
 	/* Switch to requested VMID */
 	__tlb_switch_to_guest(mmu, &cxt);
@@ -113,8 +128,6 @@ void __kvm_tlb_flush_vmid(struct kvm_s2_mmu *mmu)
 {
 	struct tlb_inv_context cxt;
 
-	dsb(ishst);
-
 	/* Switch to requested VMID */
 	__tlb_switch_to_guest(mmu, &cxt);
 
@@ -142,7 +155,8 @@ void __kvm_flush_cpu_context(struct kvm_s2_mmu *mmu)
 
 void __kvm_flush_vm_context(void)
 {
-	dsb(ishst);
+	/* Same remark as in __tblb_switch_to_guest() */
+	dsb(ish);
 	__tlbi(alle1is);
 
 	/*
