@@ -82,12 +82,24 @@ static inline void __activate_traps_common(struct kvm_vcpu *vcpu)
 	 */
 	if (kvm_arm_support_pmu_v3()) {
 		struct kvm_cpu_context *hctxt;
+		unsigned long flags;
 
 		write_sysreg(0, pmselr_el0);
 
 		hctxt = &this_cpu_ptr(&kvm_host_data)->host_ctxt;
+
+		/*
+		 * Disable IRQs to prevent a race condition between the
+		 * following code and IPIs that attempts to update
+		 * PMUSERENR_EL0. See also kvm_set_pmuserenr().
+		 */
+		local_irq_save(flags);
+
 		ctxt_sys_reg(hctxt, PMUSERENR_EL0) = read_sysreg(pmuserenr_el0);
 		write_sysreg(ARMV8_PMU_USERENR_MASK, pmuserenr_el0);
+		vcpu_set_flag(vcpu, PMUSERENR_ON_CPU);
+
+		local_irq_restore(flags);
 	}
 
 	vcpu->arch.mdcr_el2_host = read_sysreg(mdcr_el2);
@@ -112,9 +124,21 @@ static inline void __deactivate_traps_common(struct kvm_vcpu *vcpu)
 	write_sysreg(0, hstr_el2);
 	if (kvm_arm_support_pmu_v3()) {
 		struct kvm_cpu_context *hctxt;
+		unsigned long flags;
 
 		hctxt = &this_cpu_ptr(&kvm_host_data)->host_ctxt;
+
+		/*
+		 * Disable IRQs to prevent a race condition between the
+		 * following code and IPIs that attempts to update
+		 * PMUSERENR_EL0. See also kvm_set_pmuserenr().
+		 */
+		local_irq_save(flags);
+
 		write_sysreg(ctxt_sys_reg(hctxt, PMUSERENR_EL0), pmuserenr_el0);
+		vcpu_clear_flag(vcpu, PMUSERENR_ON_CPU);
+
+		local_irq_restore(flags);
 	}
 
 	if (cpus_have_final_cap(ARM64_SME)) {

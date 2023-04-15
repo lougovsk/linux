@@ -198,9 +198,9 @@ extern void warn_bogus_irq_restore(void);
 
 /*
  * The local_irq_*() APIs are equal to the raw_local_irq*()
- * if !TRACE_IRQFLAGS.
+ * if !TRACE_IRQFLAGS or if NO_TRACE_IRQFLAGS is locally set.
  */
-#ifdef CONFIG_TRACE_IRQFLAGS
+#if defined CONFIG_TRACE_IRQFLAGS && !defined(NO_TRACE_IRQFLAGS)
 
 #define local_irq_enable()				\
 	do {						\
