@@ -156,7 +156,7 @@ do {						\
 # define start_critical_timings() do { } while (0)
 #endif
 
-#ifdef CONFIG_DEBUG_IRQFLAGS
+#if defined CONFIG_DEBUG_IRQFLAGS && !defined(NO_DEBUG_IRQFLAGS)
 extern void warn_bogus_irq_restore(void);
 #define raw_check_bogus_irq_restore()			\
 	do {						\
@@ -198,9 +198,9 @@ extern void warn_bogus_irq_restore(void);
 
 /*
  * The local_irq_*() APIs are equal to the raw_local_irq*()
- * if !TRACE_IRQFLAGS.
+ * if !TRACE_IRQFLAGS or if NO_TRACE_IRQFLAGS is locally set.
  */
-#ifdef CONFIG_TRACE_IRQFLAGS
+#if defined CONFIG_TRACE_IRQFLAGS && !defined(NO_TRACE_IRQFLAGS)
 
 #define local_irq_enable()				\
 	do {						\
