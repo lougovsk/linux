@@ -21,9 +21,12 @@
 static u8 vcpu_pmuver(const struct kvm_vcpu *vcpu)
 {
 	if (kvm_vcpu_has_pmu(vcpu))
-		return vcpu->kvm->arch.dfr0_pmuver.imp;
+		return FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer),
+				 idreg_read(&vcpu->kvm->arch, SYS_ID_AA64DFR0_EL1));
+	else if (test_bit(KVM_ARCH_FLAG_VCPU_HAS_IMP_DEF_PMU, &vcpu->kvm->arch.flags))
+		return ID_AA64DFR0_EL1_PMUVer_IMP_DEF;
 
-	return vcpu->kvm->arch.dfr0_pmuver.unimp;
+	return 0;
 }
 
 static u8 perfmon_to_pmuver(u8 perfmon)
@@ -254,10 +257,24 @@ static int set_id_aa64dfr0_el1(struct kvm_vcpu *vcpu,
 	if (val)
 		return -EINVAL;
 
-	if (valid_pmu)
-		vcpu->kvm->arch.dfr0_pmuver.imp = pmuver;
-	else
-		vcpu->kvm->arch.dfr0_pmuver.unimp = pmuver;
+	if (valid_pmu) {
+		mutex_lock(&vcpu->kvm->arch.config_lock);
+
+		val = _idreg_read(&vcpu->kvm->arch, SYS_ID_AA64DFR0_EL1);
+		val &= ~ID_AA64DFR0_EL1_PMUVer_MASK;
+		val |= FIELD_PREP(ID_AA64DFR0_EL1_PMUVer_MASK, pmuver);
+		_idreg_write(&vcpu->kvm->arch, SYS_ID_AA64DFR0_EL1, val);
+
+		val = _idreg_read(&vcpu->kvm->arch, SYS_ID_DFR0_EL1);
+		val &= ~ID_DFR0_EL1_PerfMon_MASK;
+		val |= FIELD_PREP(ID_DFR0_EL1_PerfMon_MASK, pmuver_to_perfmon(pmuver));
+		_idreg_write(&vcpu->kvm->arch, SYS_ID_DFR0_EL1, val);
+
+		mutex_unlock(&vcpu->kvm->arch.config_lock);
+	} else {
+		assign_bit(KVM_ARCH_FLAG_VCPU_HAS_IMP_DEF_PMU, &vcpu->kvm->arch.flags,
+			   pmuver == ID_AA64DFR0_EL1_PMUVer_IMP_DEF);
+	}
 
 	return 0;
 }
@@ -294,10 +311,24 @@ static int set_id_dfr0_el1(struct kvm_vcpu *vcpu,
 	if (val)
 		return -EINVAL;
 
-	if (valid_pmu)
-		vcpu->kvm->arch.dfr0_pmuver.imp = perfmon_to_pmuver(perfmon);
-	else
-		vcpu->kvm->arch.dfr0_pmuver.unimp = perfmon_to_pmuver(perfmon);
+	if (valid_pmu) {
+		mutex_lock(&vcpu->kvm->arch.config_lock);
+
+		val = _idreg_read(&vcpu->kvm->arch, SYS_ID_DFR0_EL1);
+		val &= ~ID_DFR0_EL1_PerfMon_MASK;
+		val |= FIELD_PREP(ID_DFR0_EL1_PerfMon_MASK, perfmon);
+		_idreg_write(&vcpu->kvm->arch, SYS_ID_DFR0_EL1, val);
+
+		val = _idreg_read(&vcpu->kvm->arch, SYS_ID_AA64DFR0_EL1);
+		val &= ~ID_AA64DFR0_EL1_PMUVer_MASK;
+		val |= FIELD_PREP(ID_AA64DFR0_EL1_PMUVer_MASK, perfmon_to_pmuver(perfmon));
+		_idreg_write(&vcpu->kvm->arch, SYS_ID_AA64DFR0_EL1, val);
+
+		mutex_unlock(&vcpu->kvm->arch.config_lock);
+	} else {
+		assign_bit(KVM_ARCH_FLAG_VCPU_HAS_IMP_DEF_PMU, &vcpu->kvm->arch.flags,
+			   perfmon == ID_DFR0_EL1_PerfMon_IMPDEF);
+	}
 
 	return 0;
 }
@@ -483,6 +514,7 @@ void kvm_arm_init_id_regs(struct kvm *kvm)
 		idreg_write(&kvm->arch, id, val);
 	}
 
+	mutex_lock(&kvm->arch.config_lock);
 	/*
 	 * The default is to expose CSV2 == 1 if the HW isn't affected.
 	 * Although this is a per-CPU feature, we make it global because
@@ -491,8 +523,6 @@ void kvm_arm_init_id_regs(struct kvm *kvm)
 	 * Userspace can override this as long as it doesn't promise
 	 * the impossible.
 	 */
-	mutex_lock(&kvm->arch.config_lock);
-
 	val = _idreg_read(&kvm->arch, SYS_ID_AA64PFR0_EL1);
 
 	if (arm64_get_spectre_v2_state() == SPECTRE_UNAFFECTED) {
@@ -505,6 +535,18 @@ void kvm_arm_init_id_regs(struct kvm *kvm)
 	}
 
 	_idreg_write(&kvm->arch, SYS_ID_AA64PFR0_EL1, val);
+
+	/*
+	 * Initialise the default PMUver before there is a chance to
+	 * create an actual PMU.
+	 */
+	val = _idreg_read(&kvm->arch, SYS_ID_AA64DFR0_EL1);
+
+	val &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer);
+	val |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer),
+			  kvm_arm_pmu_get_pmuver_limit());
+
+	_idreg_write(&kvm->arch, SYS_ID_AA64DFR0_EL1, val);
 
 	mutex_unlock(&kvm->arch.config_lock);
 }
