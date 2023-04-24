@@ -177,6 +177,20 @@ struct kvm_smccc_features {
 	unsigned long vendor_hyp_bmap;
 };
 
+/*
+ * Emualted CPU ID registers per VM
+ * (Op0, Op1, CRn, CRm, Op2) of the ID registers to be saved in it
+ * is (3, 0, 0, crm, op2), where 1<=crm<8, 0<=op2<8.
+ *
+ * These emulated idregs are VM-wide, but accessed from the context of a vCPU.
+ * Access to id regs are guarded by kvm_arch.config_lock.
+ */
+#define KVM_ARM_ID_REG_NUM	56
+#define IDREG_IDX(id)		(((sys_reg_CRm(id) - 1) << 3) | sys_reg_Op2(id))
+struct kvm_idregs {
+	u64 regs[KVM_ARM_ID_REG_NUM];
+};
+
 typedef unsigned int pkvm_handle_t;
 
 struct kvm_protected_vm {
@@ -242,6 +256,9 @@ struct kvm_arch {
 
 	/* Hypercall features firmware registers' descriptor */
 	struct kvm_smccc_features smccc_feat;
+
+	/* Emulated CPU ID registers */
+	struct kvm_idregs idregs;
 
 	/*
 	 * For an untrusted host VM, 'pkvm.handle' is used to lookup
@@ -1025,6 +1042,8 @@ int kvm_arm_vcpu_arch_has_attr(struct kvm_vcpu *vcpu,
 long kvm_vm_ioctl_mte_copy_tags(struct kvm *kvm,
 				struct kvm_arm_copy_mte_tags *copy_tags);
 
+void kvm_arm_init_id_regs(struct kvm *kvm);
+
 /* Guest/host FPSIMD coordination helpers */
 int kvm_arch_vcpu_run_map_fp(struct kvm_vcpu *vcpu);
 void kvm_arch_vcpu_load_fp(struct kvm_vcpu *vcpu);
@@ -1089,5 +1108,33 @@ static inline void kvm_hyp_reserve(void) { }
 
 void kvm_arm_vcpu_power_off(struct kvm_vcpu *vcpu);
 bool kvm_arm_vcpu_stopped(struct kvm_vcpu *vcpu);
+
+static inline u64 _idreg_read(struct kvm_arch *arch, u32 id)
+{
+	return arch->idregs.regs[IDREG_IDX(id)];
+}
+
+static inline void _idreg_write(struct kvm_arch *arch, u32 id, u64 val)
+{
+	arch->idregs.regs[IDREG_IDX(id)] = val;
+}
+
+static inline u64 idreg_read(struct kvm_arch *arch, u32 id)
+{
+	u64 val;
+
+	mutex_lock(&arch->config_lock);
+	val = _idreg_read(arch, id);
+	mutex_unlock(&arch->config_lock);
+
+	return val;
+}
+
+static inline void idreg_write(struct kvm_arch *arch, u32 id, u64 val)
+{
+	mutex_lock(&arch->config_lock);
+	_idreg_write(arch, id, val);
+	mutex_unlock(&arch->config_lock);
+}
 
 #endif /* __ARM64_KVM_HOST_H__ */

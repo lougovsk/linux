@@ -237,6 +237,7 @@ bool write_to_read_only(struct kvm_vcpu *vcpu,
 			struct sys_reg_params *params, const struct sys_reg_desc *r);
 unsigned int raz_visibility(const struct kvm_vcpu *vcpu, const struct sys_reg_desc *r);
 int emulate_id_reg(struct kvm_vcpu *vcpu, struct sys_reg_params *params);
+u64 kvm_arm_read_id_reg(const struct kvm_vcpu *vcpu, u32 id);
 
 #define AA32(_x)	.aarch32_map = AA32_##_x
 #define Op0(_x) 	.Op0 = _x
@@ -250,7 +251,5 @@ int emulate_id_reg(struct kvm_vcpu *vcpu, struct sys_reg_params *params);
 	Op0(sys_reg_Op0(reg)), Op1(sys_reg_Op1(reg)),	\
 	CRn(sys_reg_CRn(reg)), CRm(sys_reg_CRm(reg)),	\
 	Op2(sys_reg_Op2(reg))
-
-#define KVM_ARM_ID_REG_NUM	56
 
 #endif /* __ARM64_KVM_SYS_REGS_LOCAL_H__ */
