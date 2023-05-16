@@ -66,7 +66,7 @@ static int recreate_hyp_mappings(phys_addr_t phys, unsigned long size,
 {
 	void *start, *end, *virt = hyp_phys_to_virt(phys);
 	unsigned long pgt_size = hyp_s1_pgtable_pages() << PAGE_SHIFT;
-	enum kvm_pgtable_prot prot;
+	enum kvm_pgtable_prot prot = PAGE_HYP_EXEC;
 	int ret, i;
 
 	/* Recreate the hyp page-table using the early page allocator */
@@ -88,7 +88,11 @@ static int recreate_hyp_mappings(phys_addr_t phys, unsigned long size,
 	if (ret)
 		return ret;
 
-	ret = pkvm_create_mappings(__hyp_text_start, __hyp_text_end, PAGE_HYP_EXEC);
+	/* Hypervisor text is mapped as guarded pages(GP). */
+	if (IS_ENABLED(CONFIG_ARM64_BTI_KERNEL) && cpus_have_const_cap(ARM64_BTI))
+		prot |= KVM_PGTABLE_PROT_GP_S1;
+
+	ret = pkvm_create_mappings(__hyp_text_start, __hyp_text_end, prot);
 	if (ret)
 		return ret;
 
