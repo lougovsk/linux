@@ -152,6 +152,13 @@ static kvm_pte_t kvm_init_valid_leaf_pte(u64 pa, kvm_pte_t attr, u32 level)
 	return pte;
 }
 
+static kvm_pte_t hyp_init_valid_leaf_pte(u64 pa, kvm_pte_t attr, u32 level)
+{
+	kvm_pte_t pte = kvm_init_valid_leaf_pte(pa, attr, level);
+
+	return pte | (attr & KVM_PGTABLE_PROT_GP_S1);
+}
+
 static kvm_pte_t kvm_init_invalid_leaf_owner(u8 owner_id)
 {
 	return FIELD_PREP(KVM_INVALID_PTE_OWNER_MASK, owner_id);
@@ -371,6 +378,8 @@ static int hyp_set_prot_attr(enum kvm_pgtable_prot prot, kvm_pte_t *ptep)
 
 		if (device)
 			return -EINVAL;
+
+		attr |= prot & KVM_PGTABLE_PROT_GP_S1;
 	} else {
 		attr |= KVM_PTE_LEAF_ATTR_HI_S1_XN;
 	}
@@ -414,7 +423,7 @@ static bool hyp_map_walker_try_leaf(const struct kvm_pgtable_visit_ctx *ctx,
 		return false;
 
 	data->phys += granule;
-	new = kvm_init_valid_leaf_pte(phys, data->attr, ctx->level);
+	new = hyp_init_valid_leaf_pte(phys, data->attr, ctx->level);
 	if (ctx->old == new)
 		return true;
 	if (!kvm_pte_valid(ctx->old))

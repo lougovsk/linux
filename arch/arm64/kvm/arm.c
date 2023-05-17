@@ -2073,6 +2073,7 @@ static int __init init_hyp_mode(void)
 	u32 hyp_va_bits;
 	int cpu;
 	int err = -ENOMEM;
+	enum kvm_pgtable_prot text_prot = PAGE_HYP_EXEC;
 
 	/*
 	 * The protected Hyp-mode cannot be initialized if the memory pool
@@ -2124,8 +2125,12 @@ static int __init init_hyp_mode(void)
 	/*
 	 * Map the Hyp-code called directly from the host
 	 */
+	if (IS_ENABLED(CONFIG_ARM64_BTI_KERNEL) && system_supports_bti())
+		text_prot |= KVM_PGTABLE_PROT_GP_S1;
+
 	err = create_hyp_mappings(kvm_ksym_ref(__hyp_text_start),
-				  kvm_ksym_ref(__hyp_text_end), PAGE_HYP_EXEC);
+				  kvm_ksym_ref(__hyp_text_end), text_prot);
+
 	if (err) {
 		kvm_err("Cannot map world-switch code\n");
 		goto out_err;
