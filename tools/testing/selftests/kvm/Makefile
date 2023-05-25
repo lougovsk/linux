@@ -13,6 +13,8 @@ else ifeq ($(ARCH),arm64)
 	ARCH_DIR := aarch64
 else ifeq ($(ARCH),s390)
 	ARCH_DIR := s390x
+else ifeq ($(ARCH),riscv)
+	ARCH_DIR := riscv
 else
 	ARCH_DIR := $(ARCH)
 endif
@@ -177,6 +179,7 @@ TEST_GEN_PROGS_riscv += kvm_create_max_vcpus
 TEST_GEN_PROGS_riscv += kvm_page_table_test
 TEST_GEN_PROGS_riscv += set_memory_region_test
 TEST_GEN_PROGS_riscv += kvm_binary_stats_test
+TEST_GEN_PROGS_riscv += get-reg-list
 
 SPLIT_TESTS += get-reg-list
 
