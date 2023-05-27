@@ -258,13 +258,24 @@ static int kvm_set_vm_width(struct kvm_vcpu *vcpu)
 int kvm_reset_vcpu(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_reset_state reset_state;
+	struct kvm *kvm = vcpu->kvm;
 	int ret;
 	bool loaded;
 	u32 pstate;
 
-	mutex_lock(&vcpu->kvm->arch.config_lock);
+	mutex_lock(&kvm->arch.config_lock);
 	ret = kvm_set_vm_width(vcpu);
-	mutex_unlock(&vcpu->kvm->arch.config_lock);
+	if (!ret && kvm_vcpu_has_pmu(vcpu)) {
+		if (!kvm_arm_support_pmu_v3())
+			ret = -EINVAL;
+		else if (unlikely(!kvm->arch.arm_pmu))
+			/*
+			 * As no PMU is set for the guest yet,
+			 * set the default one.
+			 */
+			ret = kvm_arm_set_vm_pmu(kvm, NULL);
+	}
+	mutex_unlock(&kvm->arch.config_lock);
 
 	if (ret)
 		return ret;
@@ -314,11 +325,6 @@ int kvm_reset_vcpu(struct kvm_vcpu *vcpu)
 			pstate = VCPU_RESET_PSTATE_EL2;
 		} else {
 			pstate = VCPU_RESET_PSTATE_EL1;
-		}
-
-		if (kvm_vcpu_has_pmu(vcpu) && !kvm_arm_support_pmu_v3()) {
-			ret = -EINVAL;
-			goto out;
 		}
 		break;
 	}
