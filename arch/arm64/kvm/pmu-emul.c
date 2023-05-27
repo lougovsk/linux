@@ -871,6 +871,8 @@ static bool pmu_irq_is_valid(struct kvm *kvm, int irq)
 
 int kvm_arm_set_vm_pmu(struct kvm *kvm, struct arm_pmu *arm_pmu)
 {
+	u8 new_limit;
+
 	lockdep_assert_held(&kvm->arch.config_lock);
 
 	if (!arm_pmu) {
@@ -880,6 +882,22 @@ int kvm_arm_set_vm_pmu(struct kvm *kvm, struct arm_pmu *arm_pmu)
 	}
 
 	kvm->arch.arm_pmu = arm_pmu;
+	new_limit = kvm_arm_pmu_get_pmuver_limit(kvm);
+
+	/*
+	 * Reset the value of ID_AA64DFR0_EL1.PMUVer to the new limit value,
+	 * unless the current value was set by userspace and is still a valid
+	 * value for the new PMU.
+	 */
+	if (!test_bit(KVM_ARCH_FLAG_PMUVER_DIRTY, &kvm->arch.flags)) {
+		kvm->arch.dfr0_pmuver.imp = new_limit;
+		return 0;
+	}
+
+	if (kvm->arch.dfr0_pmuver.imp > new_limit) {
+		kvm->arch.dfr0_pmuver.imp = new_limit;
+		clear_bit(KVM_ARCH_FLAG_PMUVER_DIRTY, &kvm->arch.flags);
+	}
 
 	return 0;
 }
@@ -1049,13 +1067,9 @@ int kvm_arm_pmu_v3_has_attr(struct kvm_vcpu *vcpu, struct kvm_device_attr *attr)
 	return -ENXIO;
 }
 
-u8 kvm_arm_pmu_get_pmuver_limit(void)
+u8 kvm_arm_pmu_get_pmuver_limit(struct kvm *kvm)
 {
-	u64 tmp;
+	u8 host_pmuver = kvm->arch.arm_pmu ? kvm->arch.arm_pmu->pmuver : 0;
 
-	tmp = read_sanitised_ftr_reg(SYS_ID_AA64DFR0_EL1);
-	tmp = cpuid_feature_cap_perfmon_field(tmp,
-					      ID_AA64DFR0_EL1_PMUVer_SHIFT,
-					      ID_AA64DFR0_EL1_PMUVer_V3P5);
-	return FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer), tmp);
+	return min_t(u8, host_pmuver, ID_AA64DFR0_EL1_PMUVer_V3P5);
 }

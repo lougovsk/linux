@@ -231,6 +231,8 @@ struct kvm_arch {
 #define KVM_ARCH_FLAG_TIMER_PPIS_IMMUTABLE		7
 	/* SMCCC filter initialized for the VM */
 #define KVM_ARCH_FLAG_SMCCC_FILTER_CONFIGURED		8
+	/* PMUVer set by userspace for the VM */
+#define KVM_ARCH_FLAG_PMUVER_DIRTY			9
 	unsigned long flags;
 
 	/*

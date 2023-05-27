@@ -1382,8 +1382,11 @@ static int set_id_aa64dfr0_el1(struct kvm_vcpu *vcpu,
 {
 	u8 pmuver, host_pmuver;
 	bool valid_pmu;
+	u64 current_val = read_id_reg(vcpu, rd);
+	int ret = -EINVAL;
 
-	host_pmuver = kvm_arm_pmu_get_pmuver_limit();
+	mutex_lock(&vcpu->kvm->arch.config_lock);
+	host_pmuver = kvm_arm_pmu_get_pmuver_limit(vcpu->kvm);
 
 	/*
 	 * Allow AA64DFR0_EL1.PMUver to be set from userspace as long
@@ -1393,26 +1396,31 @@ static int set_id_aa64dfr0_el1(struct kvm_vcpu *vcpu,
 	 */
 	pmuver = FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer), val);
 	if ((pmuver != ID_AA64DFR0_EL1_PMUVer_IMP_DEF && pmuver > host_pmuver))
-		return -EINVAL;
+		goto out;
 
 	valid_pmu = (pmuver != 0 && pmuver != ID_AA64DFR0_EL1_PMUVer_IMP_DEF);
 
 	/* Make sure view register and PMU support do match */
 	if (kvm_vcpu_has_pmu(vcpu) != valid_pmu)
-		return -EINVAL;
+		goto out;
 
 	/* We can only differ with PMUver, and anything else is an error */
-	val ^= read_id_reg(vcpu, rd);
+	val ^= current_val;
 	val &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer);
 	if (val)
-		return -EINVAL;
+		goto out;
 
-	if (valid_pmu)
+	if (valid_pmu) {
 		vcpu->kvm->arch.dfr0_pmuver.imp = pmuver;
-	else
+		set_bit(KVM_ARCH_FLAG_PMUVER_DIRTY, &vcpu->kvm->arch.flags);
+	} else
 		vcpu->kvm->arch.dfr0_pmuver.unimp = pmuver;
 
-	return 0;
+	ret = 0;
+out:
+	mutex_unlock(&vcpu->kvm->arch.config_lock);
+
+	return ret;
 }
 
 static int set_id_dfr0_el1(struct kvm_vcpu *vcpu,
@@ -1421,8 +1429,11 @@ static int set_id_dfr0_el1(struct kvm_vcpu *vcpu,
 {
 	u8 perfmon, host_perfmon;
 	bool valid_pmu;
+	u64 current_val = read_id_reg(vcpu, rd);
+	int ret = -EINVAL;
 
-	host_perfmon = pmuver_to_perfmon(kvm_arm_pmu_get_pmuver_limit());
+	mutex_lock(&vcpu->kvm->arch.config_lock);
+	host_perfmon = pmuver_to_perfmon(kvm_arm_pmu_get_pmuver_limit(vcpu->kvm));
 
 	/*
 	 * Allow DFR0_EL1.PerfMon to be set from userspace as long as
@@ -1433,26 +1444,31 @@ static int set_id_dfr0_el1(struct kvm_vcpu *vcpu,
 	perfmon = FIELD_GET(ARM64_FEATURE_MASK(ID_DFR0_EL1_PerfMon), val);
 	if ((perfmon != ID_DFR0_EL1_PerfMon_IMPDEF && perfmon > host_perfmon) ||
 	    (perfmon != 0 && perfmon < ID_DFR0_EL1_PerfMon_PMUv3))
-		return -EINVAL;
+		goto out;
 
 	valid_pmu = (perfmon != 0 && perfmon != ID_DFR0_EL1_PerfMon_IMPDEF);
 
 	/* Make sure view register and PMU support do match */
 	if (kvm_vcpu_has_pmu(vcpu) != valid_pmu)
-		return -EINVAL;
+		goto out;
 
 	/* We can only differ with PerfMon, and anything else is an error */
-	val ^= read_id_reg(vcpu, rd);
+	val ^= current_val;
 	val &= ~ARM64_FEATURE_MASK(ID_DFR0_EL1_PerfMon);
 	if (val)
-		return -EINVAL;
+		goto out;
 
-	if (valid_pmu)
+	if (valid_pmu) {
 		vcpu->kvm->arch.dfr0_pmuver.imp = perfmon_to_pmuver(perfmon);
-	else
+		set_bit(KVM_ARCH_FLAG_PMUVER_DIRTY, &vcpu->kvm->arch.flags);
+	} else
 		vcpu->kvm->arch.dfr0_pmuver.unimp = perfmon_to_pmuver(perfmon);
 
-	return 0;
+	ret = 0;
+out:
+	mutex_unlock(&vcpu->kvm->arch.config_lock);
+
+	return ret;
 }
 
 /*
