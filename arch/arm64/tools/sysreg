@@ -2200,3 +2200,62 @@ Sysreg	ICC_NMIAR1_EL1	3	0	12	9	5
 Res0	63:24
 Field	23:0	INTID
 EndSysreg
+
+Sysreg	TRBLIMITR_EL1	3	0	9	11	0
+Field	63:12	LIMIT
+Res0	11:6
+Field	5	NVM
+Enum	4:3	TRIG_MODE
+	0b00	STOP
+	0b01	IRQ
+	0b11	IGNR
+EndEnum
+Enum	2:1	FILL_MODE
+	0b00	FILL
+	0b01	WRAP
+	0b11	CBUF
+EndEnum
+Field	0	ENABLE
+EndSysreg
+
+Sysreg	TRBPTR_EL1	3	0	9	11	1
+Field	63:0	PTR
+EndSysreg
+
+Sysreg	TRBBASER_EL1	3	0	9	11	2
+Field	63:12	BASE
+Res0	11:0
+EndSysreg
+
+Sysreg	TRBSR_EL1	3	0	9	11	3
+Res0	63:32
+Field	31:26	EC
+Res0	25:23
+Field	22	IRQ
+Field	21	TRG
+Field	20	WRAP
+Res0	19
+Field	18	ABORT
+Field	17	STOP
+Res0	16
+Res0	15:6
+Field	5:0	BSC
+EndSysreg
+
+Sysreg	TRBMAR_EL1	3	0	9	11	4
+Res0	63:10
+Field	9:8	SH
+Field	7:0	ATTR
+EndSysreg
+
+Sysreg	TRBTRG_EL1	3	0	9	11	6
+Res0	63:32
+Field	31:0	TRG
+EndSysreg
+
+Sysreg	TRBIDR_EL1	3	0	9	11	7
+Res0	63:6
+Field	5	FLAG
+Field	4	PROG
+Field	3:0	ALIGN
+EndSysreg
