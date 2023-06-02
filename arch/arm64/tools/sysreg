@@ -2243,3 +2243,10 @@ Field	17	S
 Res0	16
 Field	15:0	MSS
 EndSysreg
+
+Sysreg	TRBMAR_EL1	3	0	9	11	4
+Res0	63:12
+Field	11:10	PAS
+Field	9:8	SH
+Field	7:0	Attr
+EndSysreg
