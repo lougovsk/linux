@@ -700,6 +700,7 @@ static struct arm_pmu *kvm_pmu_probe_armpmu(void)
 
 	mutex_lock(&arm_pmus_lock);
 
+	preempt_disable();
 	cpu = smp_processor_id();
 	list_for_each_entry(entry, &arm_pmus, entry) {
 		tmp = entry->arm_pmu;
@@ -709,7 +710,7 @@ static struct arm_pmu *kvm_pmu_probe_armpmu(void)
 			break;
 		}
 	}
-
+	preempt_enable();
 	mutex_unlock(&arm_pmus_lock);
 
 	return pmu;
