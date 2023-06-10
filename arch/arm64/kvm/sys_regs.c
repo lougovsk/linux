@@ -1408,7 +1408,7 @@ static int set_id_aa64dfr0_el1(struct kvm_vcpu *vcpu,
 	if ((pmuver != ID_AA64DFR0_EL1_PMUVer_IMP_DEF && pmuver > host_pmuver))
 		return -EINVAL;
 
-	valid_pmu = (pmuver != 0 && pmuver != ID_AA64DFR0_EL1_PMUVer_IMP_DEF);
+	valid_pmu = pmu_v3_is_supported(pmuver);
 
 	/* Make sure view register and PMU support do match */
 	if (kvm_vcpu_has_pmu(vcpu) != valid_pmu)

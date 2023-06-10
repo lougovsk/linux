@@ -12,6 +12,14 @@
 
 #define ARMV8_PMU_CYCLE_IDX		(ARMV8_PMU_MAX_COUNTERS - 1)
 
+static inline bool pmu_v3_is_supported(int pmuver)
+{
+	WARN_ON_ONCE(pmuver & ~GENMASK_ULL(ARM64_FEATURE_FIELD_BITS - 1, 0));
+
+	return (pmuver != ID_AA64DFR0_EL1_PMUVer_NI) &&
+	       (pmuver != ID_AA64DFR0_EL1_PMUVer_IMP_DEF);
+}
+
 #ifdef CONFIG_HW_PERF_EVENTS
 
 struct kvm_pmc {

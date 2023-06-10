@@ -672,8 +672,7 @@ void kvm_host_pmu_init(struct arm_pmu *pmu)
 {
 	struct arm_pmu_entry *entry;
 
-	if (pmu->pmuver == ID_AA64DFR0_EL1_PMUVer_NI ||
-	    pmu->pmuver == ID_AA64DFR0_EL1_PMUVer_IMP_DEF)
+	if (!pmu_v3_is_supported(pmu->pmuver))
 		return;
 
 	mutex_lock(&arm_pmus_lock);
