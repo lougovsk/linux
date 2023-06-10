@@ -105,6 +105,14 @@ void kvm_vcpu_pmu_restore_host(struct kvm_vcpu *vcpu);
 
 u8 kvm_arm_pmu_get_pmuver_limit(void);
 
+static inline void kvm_arm_set_support_pmu_v3(void)
+{
+	u8 pmuver = kvm_arm_pmu_get_pmuver_limit();
+
+	if (pmu_v3_is_supported(pmuver))
+		static_branch_enable(&kvm_arm_pmu_available);
+}
+
 #else
 struct kvm_pmu {
 };
@@ -113,6 +121,8 @@ static inline bool kvm_arm_support_pmu_v3(void)
 {
 	return false;
 }
+
+static inline void kvm_arm_set_support_pmu_v3(void) {};
 
 #define kvm_arm_pmu_irq_initialized(v)	(false)
 static inline u64 kvm_pmu_get_counter_value(struct kvm_vcpu *vcpu,
