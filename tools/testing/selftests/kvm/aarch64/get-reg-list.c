@@ -27,6 +27,14 @@ bool filter_reg(__u64 reg)
 	return false;
 }
 
+bool reject_set_fail(__u64 reg)
+{
+	if (reg == KVM_REG_ARM64_SVE_VLS)
+		return (errno != EPERM);
+
+	return false;
+}
+
 #define REG_MASK (KVM_REG_ARCH_MASK | KVM_REG_SIZE_MASK | KVM_REG_ARM_COPROC_MASK)
 
 #define CORE_REGS_XX_NR_WORDS	2
