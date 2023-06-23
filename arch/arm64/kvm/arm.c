@@ -1250,7 +1250,8 @@ static int kvm_vcpu_set_target(struct kvm_vcpu *vcpu,
 {
 	int ret;
 
-	if (init->target != kvm_target_cpu())
+	if (init->target != KVM_ARM_TARGET_GENERIC_V8 &&
+	    init->target != kvm_target_cpu())
 		return -EINVAL;
 
 	ret = kvm_vcpu_init_check_features(vcpu, init);
