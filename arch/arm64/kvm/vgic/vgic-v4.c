@@ -343,6 +343,9 @@ int vgic_v4_put(struct kvm_vcpu *vcpu, bool need_db)
 	if (!vgic_supports_direct_msis(vcpu->kvm) || !vpe->resident)
 		return 0;
 
+	if (vcpu->stat.generic.blocking == 1)
+		need_db = true;
+
 	return its_make_vpe_non_resident(vpe, need_db);
 }
 
