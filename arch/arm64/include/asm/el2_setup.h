@@ -143,11 +143,12 @@
 	and	x1, x1, #HCR_E2H
 	cbz	x1, .LnVHE_\@
 	mov	x0, #(CPACR_EL1_FPEN_EL1EN | CPACR_EL1_FPEN_EL0EN)
-	b	.Lset_cptr_\@
+	msr	cpacr_el1, x0
+	b	.Lskip_set_cptr_\@
 .LnVHE_\@:
 	mov	x0, #0x33ff
-.Lset_cptr_\@:
 	msr	cptr_el2, x0			// Disable copro. traps to EL2
+.Lskip_set_cptr_\@:
 .endm
 
 /* Disable any fine grained traps */
@@ -268,19 +269,21 @@
 	check_override id_aa64pfr0, ID_AA64PFR0_EL1_SVE_SHIFT, .Linit_sve_\@, .Lskip_sve_\@, x1, x2
 
 .Linit_sve_\@:	/* SVE register access */
-	mrs	x0, cptr_el2			// Disable SVE traps
 	mrs	x1, hcr_el2
 	and	x1, x1, #HCR_E2H
 	cbz	x1, .Lcptr_nvhe_\@
 
-	// VHE case
+	// (h)VHE case
+	mrs	x0, cpacr_el1			// Disable SVE traps
 	orr	x0, x0, #(CPACR_EL1_ZEN_EL1EN | CPACR_EL1_ZEN_EL0EN)
-	b	.Lset_cptr_\@
+	msr	cpacr_el1, x0
+	b	.Lskip_set_cptr_\@
 
 .Lcptr_nvhe_\@: // nVHE case
+	mrs	x0, cptr_el2			// Disable SVE traps
 	bic	x0, x0, #CPTR_EL2_TZ
-.Lset_cptr_\@:
 	msr	cptr_el2, x0
+.Lskip_set_cptr_\@:
 	isb
 	mov	x1, #ZCR_ELx_LEN_MASK		// SVE: Enable full vector
 	msr_s	SYS_ZCR_EL2, x1			// length for EL1.
