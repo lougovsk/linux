@@ -2053,6 +2053,7 @@ static int __init init_subsystems(void)
 		goto out;
 
 	kvm_register_perf_callbacks(NULL);
+	kvm_pmu_init();
 
 out:
 	if (err)
