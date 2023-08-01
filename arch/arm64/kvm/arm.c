@@ -1630,6 +1630,9 @@ int kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 
 		return kvm_vm_set_attr(kvm, &attr);
 	}
+	case KVM_ARM_GET_FEATURE_ID_WRITABLE_MASKS: {
+		return kvm_vm_ioctl_get_feature_id_writable_masks(kvm, argp);
+	}
 	default:
 		return -EINVAL;
 	}
