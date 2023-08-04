@@ -253,6 +253,14 @@ static inline bool kvm_has_cap(long cap)
 	TEST_ASSERT(!ret, __KVM_IOCTL_ERROR(#cmd, ret));	\
 })
 
+#define kvm_fd_ioctl(kvm_fd, cmd, arg)				\
+({								\
+	int fd = __kvm_ioctl(kvm_fd, cmd, arg);			\
+								\
+	TEST_ASSERT(fd >= 0, __KVM_IOCTL_ERROR(#cmd, fd));	\
+	fd;							\
+})
+
 static __always_inline void static_assert_is_vm(struct kvm_vm *vm) { }
 
 #define __vm_ioctl(vm, cmd, arg)				\
@@ -266,6 +274,14 @@ static __always_inline void static_assert_is_vm(struct kvm_vm *vm) { }
 	int ret = __vm_ioctl(vm, cmd, arg);			\
 								\
 	TEST_ASSERT(!ret, __KVM_IOCTL_ERROR(#cmd, ret));	\
+})
+
+#define vm_fd_ioctl(vm, cmd, arg)				\
+({								\
+	int fd = __vm_ioctl(vm, cmd, arg);			\
+								\
+	TEST_ASSERT(fd >= 0, __KVM_IOCTL_ERROR(#cmd, fd));	\
+	fd;							\
 })
 
 static __always_inline void static_assert_is_vcpu(struct kvm_vcpu *vcpu) { }
@@ -283,16 +299,21 @@ static __always_inline void static_assert_is_vcpu(struct kvm_vcpu *vcpu) { }
 	TEST_ASSERT(!ret, __KVM_IOCTL_ERROR(#cmd, ret));	\
 })
 
+#define vcpu_fd_ioctl(vcpu, cmd, arg)				\
+({								\
+	int fd = __vcpu_ioctl(vcpu, cmd, arg);			\
+								\
+	TEST_ASSERT(fd >= 0, __KVM_IOCTL_ERROR(#cmd, fd));	\
+	fd;							\
+})
+
 /*
  * Looks up and returns the value corresponding to the capability
  * (KVM_CAP_*) given by cap.
  */
 static inline int vm_check_cap(struct kvm_vm *vm, long cap)
 {
-	int ret =  __vm_ioctl(vm, KVM_CHECK_EXTENSION, (void *)cap);
-
-	TEST_ASSERT(ret >= 0, KVM_IOCTL_ERROR(KVM_CHECK_EXTENSION, ret));
-	return ret;
+	return vm_fd_ioctl(vm, KVM_CHECK_EXTENSION, (void *)cap);
 }
 
 static inline int __vm_enable_cap(struct kvm_vm *vm, uint32_t cap, uint64_t arg0)
@@ -348,10 +369,7 @@ static inline uint32_t kvm_vm_reset_dirty_ring(struct kvm_vm *vm)
 
 static inline int vm_get_stats_fd(struct kvm_vm *vm)
 {
-	int fd = __vm_ioctl(vm, KVM_GET_STATS_FD, NULL);
-
-	TEST_ASSERT(fd >= 0, KVM_IOCTL_ERROR(KVM_GET_STATS_FD, fd));
-	return fd;
+	return vm_fd_ioctl(vm, KVM_GET_STATS_FD, NULL);
 }
 
 static inline void read_stats_header(int stats_fd, struct kvm_stats_header *header)
@@ -560,10 +578,7 @@ static inline void vcpu_nested_state_set(struct kvm_vcpu *vcpu,
 #endif
 static inline int vcpu_get_stats_fd(struct kvm_vcpu *vcpu)
 {
-	int fd = __vcpu_ioctl(vcpu, KVM_GET_STATS_FD, NULL);
-
-	TEST_ASSERT(fd >= 0, KVM_IOCTL_ERROR(KVM_GET_STATS_FD, fd));
-	return fd;
+	return vcpu_fd_ioctl(vcpu, KVM_GET_STATS_FD, NULL);
 }
 
 int __kvm_has_device_attr(int dev_fd, uint32_t group, uint64_t attr);

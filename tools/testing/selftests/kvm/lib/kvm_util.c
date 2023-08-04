@@ -117,8 +117,12 @@ unsigned int kvm_check_cap(long cap)
 	int kvm_fd;
 
 	kvm_fd = open_kvm_dev_path_or_exit();
-	ret = __kvm_ioctl(kvm_fd, KVM_CHECK_EXTENSION, (void *)cap);
-	TEST_ASSERT(ret >= 0, KVM_IOCTL_ERROR(KVM_CHECK_EXTENSION, ret));
+
+	/*
+	 * KVM_CHECK_EXTENSION doesn't return a file descriptor, but the
+	 * semantics are the same: a negative value is considered a failure.
+	 */
+	ret = kvm_fd_ioctl(kvm_fd, KVM_CHECK_EXTENSION, (void *)cap);
 
 	close(kvm_fd);
 
@@ -136,12 +140,10 @@ void vm_enable_dirty_ring(struct kvm_vm *vm, uint32_t ring_size)
 
 static void vm_open(struct kvm_vm *vm)
 {
-	vm->kvm_fd = _open_kvm_dev_path_or_exit(O_RDWR);
-
 	TEST_REQUIRE(kvm_has_cap(KVM_CAP_IMMEDIATE_EXIT));
 
-	vm->fd = __kvm_ioctl(vm->kvm_fd, KVM_CREATE_VM, (void *)vm->type);
-	TEST_ASSERT(vm->fd >= 0, KVM_IOCTL_ERROR(KVM_CREATE_VM, vm->fd));
+	vm->kvm_fd = _open_kvm_dev_path_or_exit(O_RDWR);
+	vm->fd = kvm_fd_ioctl(vm->kvm_fd, KVM_CREATE_VM, (void *)vm->type);
 }
 
 const char *vm_guest_mode_string(uint32_t i)
@@ -1222,8 +1224,7 @@ struct kvm_vcpu *__vm_vcpu_add(struct kvm_vm *vm, uint32_t vcpu_id)
 
 	vcpu->vm = vm;
 	vcpu->id = vcpu_id;
-	vcpu->fd = __vm_ioctl(vm, KVM_CREATE_VCPU, (void *)(unsigned long)vcpu_id);
-	TEST_ASSERT(vcpu->fd >= 0, KVM_IOCTL_ERROR(KVM_CREATE_VCPU, vcpu->fd));
+	vcpu->fd = vm_fd_ioctl(vm, KVM_CREATE_VCPU, (void *)(unsigned long)vcpu_id);
 
 	TEST_ASSERT(vcpu_mmap_sz() >= sizeof(*vcpu->run), "vcpu mmap size "
 		"smaller than expected, vcpu_mmap_sz: %i expected_min: %zi",
