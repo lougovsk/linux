@@ -496,7 +496,7 @@ void aarch64_get_supported_page_sizes(uint32_t ipa,
 				      bool *ps4k, bool *ps16k, bool *ps64k)
 {
 	struct kvm_vcpu_init preferred_init;
-	int kvm_fd, vm_fd, vcpu_fd, err;
+	int kvm_fd, vm_fd, vcpu_fd;
 	uint64_t val;
 	struct kvm_one_reg reg = {
 		.id	= KVM_ARM64_SYS_REG(SYS_ID_AA64MMFR0_EL1),
@@ -504,19 +504,13 @@ void aarch64_get_supported_page_sizes(uint32_t ipa,
 	};
 
 	kvm_fd = open_kvm_dev_path_or_exit();
-	vm_fd = __kvm_ioctl(kvm_fd, KVM_CREATE_VM, (void *)(unsigned long)ipa);
-	TEST_ASSERT(vm_fd >= 0, KVM_IOCTL_ERROR(KVM_CREATE_VM, vm_fd));
+	vm_fd = kvm_fd_ioctl(kvm_fd, KVM_CREATE_VM, (void *)(unsigned long)ipa);
+	vcpu_fd = kvm_fd_ioctl(vm_fd, KVM_CREATE_VCPU, (void *)0ul);
 
-	vcpu_fd = ioctl(vm_fd, KVM_CREATE_VCPU, 0);
-	TEST_ASSERT(vcpu_fd >= 0, KVM_IOCTL_ERROR(KVM_CREATE_VCPU, vcpu_fd));
+	kvm_ioctl(vm_fd, KVM_ARM_PREFERRED_TARGET, &preferred_init);
+	kvm_ioctl(vcpu_fd, KVM_ARM_VCPU_INIT, &preferred_init);
 
-	err = ioctl(vm_fd, KVM_ARM_PREFERRED_TARGET, &preferred_init);
-	TEST_ASSERT(err == 0, KVM_IOCTL_ERROR(KVM_ARM_PREFERRED_TARGET, err));
-	err = ioctl(vcpu_fd, KVM_ARM_VCPU_INIT, &preferred_init);
-	TEST_ASSERT(err == 0, KVM_IOCTL_ERROR(KVM_ARM_VCPU_INIT, err));
-
-	err = ioctl(vcpu_fd, KVM_GET_ONE_REG, &reg);
-	TEST_ASSERT(err == 0, KVM_IOCTL_ERROR(KVM_GET_ONE_REG, vcpu_fd));
+	kvm_ioctl(vcpu_fd, KVM_GET_ONE_REG, &reg);
 
 	*ps4k = FIELD_GET(ARM64_FEATURE_MASK(ID_AA64MMFR0_TGRAN4), val) != 0xf;
 	*ps64k = FIELD_GET(ARM64_FEATURE_MASK(ID_AA64MMFR0_TGRAN64), val) == 0;
