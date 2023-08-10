@@ -18,6 +18,7 @@ void *hyp_fixmap_map(phys_addr_t phys);
 void hyp_fixmap_unmap(void);
 
 int hyp_create_idmap(u32 hyp_va_bits);
+int hyp_create_stack(unsigned long stack_pa, unsigned long *stack_va);
 int hyp_map_vectors(void);
 int hyp_back_vmemmap(phys_addr_t back);
 int pkvm_cpu_set_vector(enum arm64_hyp_spectre_vector slot);
