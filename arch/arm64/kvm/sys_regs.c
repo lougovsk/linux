@@ -1346,9 +1346,6 @@ static u64 __kvm_read_sanitised_id_reg(const struct kvm_vcpu *vcpu,
 			val &= ~ARM64_FEATURE_MASK(ID_AA64ISAR2_EL1_WFxT);
 		val &= ~ARM64_FEATURE_MASK(ID_AA64ISAR2_EL1_MOPS);
 		break;
-	case SYS_ID_AA64MMFR2_EL1:
-		val &= ~ID_AA64MMFR2_EL1_CCIDX_MASK;
-		break;
 	case SYS_ID_MMFR4_EL1:
 		val &= ~ARM64_FEATURE_MASK(ID_MMFR4_EL1_CCIDX);
 		break;
@@ -1579,6 +1576,15 @@ static int set_id_dfr0_el1(struct kvm_vcpu *vcpu,
 		return -EINVAL;
 
 	return set_id_reg(vcpu, rd, val);
+}
+
+static u64 read_sanitised_id_aa64mmfr2_el1(struct kvm_vcpu *vcpu,
+					   const struct sys_reg_desc *rd)
+{
+	u64 val = read_sanitised_ftr_reg(SYS_ID_AA64MMFR2_EL1);
+
+	val &= ~ID_AA64MMFR2_EL1_CCIDX_MASK;
+	return val;
 }
 
 /*
@@ -1936,6 +1942,10 @@ static bool access_spsr(struct kvm_vcpu *vcpu,
 }
 
 #define ID_AA64DFR0_EL1_RES0_MASK (GENMASK(59, 56) | GENMASK(27, 24) | GENMASK(19, 16))
+#define ID_AA64MMFR0_EL1_RES0_MASK GENMASK(55, 48)
+#define ID_AA64MMFR1_EL1_RES0_MASK GENMASK(63, 60)
+#define ID_AA64MMFR2_EL1_RES0_MASK GENMASK(47, 44)
+#define ID_AA64MMFR3_EL1_RES0_MASK (GENMASK(59, 32) | GENMASK(27, 8))
 
 /*
  * Architected system registers.
@@ -2068,10 +2078,11 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	ID_UNALLOCATED(6,7),
 
 	/* CRm=7 */
-	ID_SANITISED(ID_AA64MMFR0_EL1),
-	ID_SANITISED(ID_AA64MMFR1_EL1),
-	ID_SANITISED(ID_AA64MMFR2_EL1),
-	ID_SANITISED(ID_AA64MMFR3_EL1),
+	ID_SANITISED_W(ID_AA64MMFR0_EL1, ~ID_AA64MMFR0_EL1_RES0_MASK),
+	ID_SANITISED_W(ID_AA64MMFR1_EL1, ~ID_AA64MMFR1_EL1_RES0_MASK),
+	_ID_SANITISED_W(ID_AA64MMFR2_EL1, set_id_reg, read_sanitised_id_aa64mmfr2_el1,
+			~(ID_AA64MMFR2_EL1_CCIDX_MASK | ID_AA64MMFR2_EL1_RES0_MASK)),
+	ID_SANITISED_W(ID_AA64MMFR3_EL1, ~ID_AA64MMFR3_EL1_RES0_MASK),
 	ID_UNALLOCATED(7,4),
 	ID_UNALLOCATED(7,5),
 	ID_UNALLOCATED(7,6),
