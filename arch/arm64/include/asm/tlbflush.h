@@ -136,10 +136,14 @@ static inline unsigned long get_trans_granule(void)
  * The address range is determined by below formula:
  * [BADDR, BADDR + (NUM + 1) * 2^(5*SCALE + 1) * PAGESIZE)
  *
+ * If LPA2 is in use, BADDR holds addr[52:16]. Else BADDR holds page number.
+ * See ARM DDI 0487I.a C5.5.21.
+ *
  */
-#define __TLBI_VADDR_RANGE(addr, asid, scale, num, ttl)				\
+#define __TLBI_VADDR_RANGE(addr, asid, scale, num, ttl, lpa2)			\
 	({									\
-		unsigned long __ta = (addr) >> PAGE_SHIFT;			\
+		unsigned long __addr_shift = lpa2 ? 16 : PAGE_SHIFT;		\
+		unsigned long __ta = (addr) >> __addr_shift;			\
 		unsigned long __ttl = (ttl >= 1 && ttl <= 3) ? ttl : 0;		\
 		__ta &= GENMASK_ULL(36, 0);					\
 		__ta |= __ttl << 37;						\
@@ -354,34 +358,44 @@ static inline void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
  * @tlb_level:	Translation Table level hint, if known
  * @tlbi_user:	If 'true', call an additional __tlbi_user()
  *              (typically for user ASIDs). 'flase' for IPA instructions
+ * @lpa2:	If 'true', the lpa2 scheme is used as set out below
  *
  * When the CPU does not support TLB range operations, flush the TLB
  * entries one by one at the granularity of 'stride'. If the TLB
  * range ops are supported, then:
  *
- * 1. If 'pages' is odd, flush the first page through non-range
- *    operations;
+ * 1. If FEAT_LPA2 is in use, the start address of a range operation
+ *    must be 64KB aligned, so flush pages one by one until the
+ *    alignment is reached using the non-range operations. This step is
+ *    skipped if LPA2 is not in use.
  *
  * 2. For remaining pages: the minimum range granularity is decided
  *    by 'scale', so multiple range TLBI operations may be required.
- *    Start from scale = 0, flush the corresponding number of pages
- *    ((num+1)*2^(5*scale+1) starting from 'addr'), then increase it
- *    until no pages left.
+ *    Start from scale = 3, flush the corresponding number of pages
+ *    ((num+1)*2^(5*scale+1) starting from 'addr'), then descrease it
+ *    until one or zero pages are left. We must start from highest scale
+ *    to ensure 64KB start alignment is maintained in the LPA2 case.
+ *
+ * 3. If there is 1 page remaining, flush it through non-range
+ *    operations. Range operations can only span an even number of
+ *    pages. We save this for last to ensure 64KB start alignment is
+ *    maintained for the LPA2 case.
  *
  * Note that certain ranges can be represented by either num = 31 and
  * scale or num = 0 and scale + 1. The loop below favours the latter
  * since num is limited to 30 by the __TLBI_RANGE_NUM() macro.
  */
 #define __flush_tlb_range_op(op, start, pages, stride,			\
-				asid, tlb_level, tlbi_user)		\
+				asid, tlb_level, tlbi_user, lpa2)	\
 do {									\
 	int num = 0;							\
-	int scale = 0;							\
+	int scale = 3;							\
 	unsigned long addr;						\
 									\
 	while (pages > 0) {						\
 		if (!system_supports_tlb_range() ||			\
-		    pages % 2 == 1) {					\
+		    pages == 1 ||					\
+		    (lpa2 && start != ALIGN(start, SZ_64K))) {		\
 			addr = __TLBI_VADDR(start, asid);		\
 			__tlbi_level(op, addr, tlb_level);		\
 			if (tlbi_user)					\
@@ -394,19 +408,19 @@ do {									\
 		num = __TLBI_RANGE_NUM(pages, scale);			\
 		if (num >= 0) {						\
 			addr = __TLBI_VADDR_RANGE(start, asid, scale,	\
-						  num, tlb_level);	\
+						num, tlb_level, lpa2);	\
 			__tlbi(r##op, addr);				\
 			if (tlbi_user)					\
 				__tlbi_user(r##op, addr);		\
 			start += __TLBI_RANGE_PAGES(num, scale) << PAGE_SHIFT; \
 			pages -= __TLBI_RANGE_PAGES(num, scale);	\
 		}							\
-		scale++;						\
+		scale--;						\
 	}								\
 } while (0)
 
-#define __flush_s2_tlb_range_op(op, start, pages, stride, tlb_level) \
-	__flush_tlb_range_op(op, start, pages, stride, 0, tlb_level, false)
+#define __flush_s2_tlb_range_op(op, start, pages, stride, tlb_level, lpa2) \
+	__flush_tlb_range_op(op, start, pages, stride, 0, tlb_level, false, lpa2)
 
 static inline void __flush_tlb_range(struct vm_area_struct *vma,
 				     unsigned long start, unsigned long end,
@@ -436,9 +450,9 @@ static inline void __flush_tlb_range(struct vm_area_struct *vma,
 	asid = ASID(vma->vm_mm);
 
 	if (last_level)
-		__flush_tlb_range_op(vale1is, start, pages, stride, asid, tlb_level, true);
+		__flush_tlb_range_op(vale1is, start, pages, stride, asid, tlb_level, true, false);
 	else
-		__flush_tlb_range_op(vae1is, start, pages, stride, asid, tlb_level, true);
+		__flush_tlb_range_op(vae1is, start, pages, stride, asid, tlb_level, true, false);
 
 	dsb(ish);
 	mmu_notifier_arch_invalidate_secondary_tlbs(vma->vm_mm, start, end);

@@ -25,7 +25,6 @@ static void tlb_flush(struct mmu_gather *tlb);
  * get the tlbi levels in arm64.  Default value is TLBI_TTL_UNKNOWN if more than
  * one of cleared_* is set or neither is set - this elides the level hinting to
  * the hardware.
- * Arm64 doesn't support p4ds now.
  */
 static inline int tlb_get_level(struct mmu_gather *tlb)
 {
@@ -47,6 +46,11 @@ static inline int tlb_get_level(struct mmu_gather *tlb)
 				   tlb->cleared_pmds ||
 				   tlb->cleared_p4ds))
 		return 1;
+
+	if (tlb->cleared_p4ds && !(tlb->cleared_ptes ||
+				   tlb->cleared_pmds ||
+				   tlb->cleared_puds))
+		return 0;
 
 	return TLBI_TTL_UNKNOWN;
 }
