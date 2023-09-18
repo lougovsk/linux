@@ -1726,6 +1726,7 @@ static void __init cpu_prepare_hyp_mode(int cpu, u32 hyp_va_bits)
 {
 	struct kvm_nvhe_init_params *params = per_cpu_ptr_nvhe_sym(kvm_init_params, cpu);
 	unsigned long tcr;
+	u64 mmfr0 = read_sanitised_ftr_reg(SYS_ID_AA64MMFR0_EL1);
 
 	/*
 	 * Calculate the raw per-cpu offset without a translation from the
@@ -1747,6 +1748,7 @@ static void __init cpu_prepare_hyp_mode(int cpu, u32 hyp_va_bits)
 	}
 	tcr &= ~TCR_T0SZ_MASK;
 	tcr |= TCR_T0SZ(hyp_va_bits);
+	tcr |= kvm_get_parange(mmfr0) << TCR_EL2_PS_SHIFT;
 	if (system_supports_lpa2())
 		tcr |= TCR_EL2_DS;
 	params->tcr_el2 = tcr;
