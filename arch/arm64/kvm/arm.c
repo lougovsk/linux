@@ -583,14 +583,16 @@ static int kvm_vcpu_initialized(struct kvm_vcpu *vcpu)
 static void kvm_init_mpidr_data(struct kvm *kvm)
 {
 	struct kvm_mpidr_data *data = NULL;
+	bool *index_inited_flags = NULL;
+	struct kvm_mpidr_data *data_to_del = NULL;
 	unsigned long c, mask, nr_entries;
 	u64 aff_set = 0, aff_clr = ~0UL;
 	struct kvm_vcpu *vcpu;
 
-	mutex_lock(&kvm->arch.config_lock);
+	if (atomic_read(&kvm->online_vcpus) == 1)
+		return;
 
-	if (kvm->arch.mpidr_data || atomic_read(&kvm->online_vcpus) == 1)
-		goto out;
+	mutex_lock(&kvm->arch.config_lock);
 
 	kvm_for_each_vcpu(c, vcpu, kvm) {
 		u64 aff = kvm_vcpu_get_mpidr_aff(vcpu);
@@ -617,16 +619,37 @@ static void kvm_init_mpidr_data(struct kvm *kvm)
 	if (!data)
 		goto out;
 
+	/*
+	 * Use index inited flags to avoid index overwrite.
+	 */
+	index_inited_flags = kcalloc(nr_entries, sizeof(bool), GFP_KERNEL);
+	if (!index_inited_flags) {
+		kfree(data);
+		goto out;
+	}
+
 	data->mpidr_mask = mask;
 
 	kvm_for_each_vcpu(c, vcpu, kvm) {
 		u64 aff = kvm_vcpu_get_mpidr_aff(vcpu);
 		u16 index = kvm_mpidr_index(data, aff);
 
+		/*
+		 * When index has inited, ignore set conflict index.
+		 */
+		if (index_inited_flags[index])
+			continue;
 		data->cmpidr_to_idx[index] = c;
+		index_inited_flags[index] = true;
 	}
-
+	/*
+	 * When mpidr_data exist, change to new data then free old data.
+	 */
+	if (kvm->arch.mpidr_data)
+		data_to_del = kvm->arch.mpidr_data;
 	kvm->arch.mpidr_data = data;
+	kfree(data_to_del);
+	kfree(index_inited_flags);
 out:
 	mutex_unlock(&kvm->arch.config_lock);
 }
@@ -654,7 +677,8 @@ int kvm_arch_vcpu_run_pid_change(struct kvm_vcpu *vcpu)
 	if (likely(vcpu_has_run_once(vcpu)))
 		return 0;
 
-	kvm_init_mpidr_data(kvm);
+	if (vcpu->vcpu_id == 0)
+		kvm_init_mpidr_data(kvm);
 
 	kvm_arm_vcpu_init_debug(vcpu);
 
@@ -2469,15 +2493,24 @@ struct kvm_vcpu *kvm_mpidr_to_vcpu(struct kvm *kvm, unsigned long mpidr)
 
 		vcpu = kvm_get_vcpu(kvm,
 				    kvm->arch.mpidr_data->cmpidr_to_idx[idx]);
+		/*
+		 * When mpidr mismatch, fallback to old iterative method.
+		 */
 		if (mpidr != kvm_vcpu_get_mpidr_aff(vcpu))
 			vcpu = NULL;
-
-		return vcpu;
+		else
+			return vcpu;
 	}
 
 	kvm_for_each_vcpu(i, vcpu, kvm) {
-		if (mpidr == kvm_vcpu_get_mpidr_aff(vcpu))
+		if (mpidr == kvm_vcpu_get_mpidr_aff(vcpu)) {
+			/*
+			 * Reinit MPIDR to vcpu index cache.
+			 */
+			if (kvm->arch.mpidr_data)
+				kvm_init_mpidr_data(kvm);
 			return vcpu;
+		}
 	}
 	return NULL;
 }
