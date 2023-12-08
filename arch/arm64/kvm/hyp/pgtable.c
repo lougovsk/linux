@@ -722,6 +722,9 @@ static int stage2_set_prot_attr(struct kvm_pgtable *pgt, enum kvm_pgtable_prot p
 	kvm_pte_t attr;
 	u32 sh = KVM_PTE_LEAF_ATTR_LO_S2_SH_IS;
 
+	if (device && normal_nc)
+		return -EINVAL;
+
 	if (device)
 		attr = KVM_S2_MEMATTR(pgt, DEVICE_nGnRE);
 	else if (normal_nc)
