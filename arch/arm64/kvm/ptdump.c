@@ -52,6 +52,11 @@ static bool is_fwb_enabled(const struct pg_state *m)
 	return fwb_enabled;
 }
 
+static bool is_pkvm_enabled(const struct pg_state *m)
+{
+	return is_protected_kvm_enabled();
+}
+
 static const struct prot_bits stage2_pte_bits[] = {
 	{
 		.mask	= PTE_VALID,
@@ -114,21 +119,55 @@ static const struct prot_bits stage2_pte_bits[] = {
 		.set	= "MEM/NORMAL FWB",
 		.feature_on	= is_fwb_enabled,
 	}, {
+		.mask	= KVM_INVALID_PTE_OWNER_MASK | PTE_VALID,
+		.val	= FIELD_PREP_CONST(KVM_INVALID_PTE_OWNER_MASK,
+					   PKVM_ID_HYP),
+		.set	= "HYP",
+	}, {
+		.mask	= KVM_INVALID_PTE_OWNER_MASK | PTE_VALID,
+		.val	= FIELD_PREP_CONST(KVM_INVALID_PTE_OWNER_MASK,
+					   PKVM_ID_FFA),
+		.set	= "FF-A",
+	}, {
+		.mask	= __PKVM_PAGE_RESERVED | PTE_VALID,
+		.val	= PKVM_PAGE_OWNED | PTE_VALID,
+		.set	= "PKVM_PAGE_OWNED",
+		.feature_on	= is_pkvm_enabled,
+	}, {
+		.mask   = __PKVM_PAGE_RESERVED | PTE_VALID,
+		.val	= PKVM_PAGE_SHARED_OWNED | PTE_VALID,
+		.set	= "PKVM_PAGE_SHARED_OWNED",
+		.feature_on     = is_pkvm_enabled,
+	}, {
+		.mask	= __PKVM_PAGE_RESERVED | PTE_VALID,
+		.val	= PKVM_PAGE_SHARED_BORROWED | PTE_VALID,
+		.set	= "PKVM_PAGE_SHARED_BORROWED",
+		.feature_on     = is_pkvm_enabled,
+	}, {
+		.mask	= PKVM_NOPAGE | PTE_VALID,
+		.val	= PKVM_NOPAGE,
+		.set	= "PKVM_NOPAGE",
+		.feature_on     = is_pkvm_enabled,
+	}, {
 		.mask	= KVM_PGTABLE_PROT_SW0,
 		.val	= KVM_PGTABLE_PROT_SW0,
-		.set	= "SW0", /* PKVM_PAGE_SHARED_OWNED */
+		.set    = "SW0",
+		.feature_off	= is_pkvm_enabled,
 	}, {
-		.mask   = KVM_PGTABLE_PROT_SW1,
+		.mask	= KVM_PGTABLE_PROT_SW1,
 		.val	= KVM_PGTABLE_PROT_SW1,
-		.set	= "SW1", /* PKVM_PAGE_SHARED_BORROWED */
+		.set	= "SW1",
+		.feature_off	= is_pkvm_enabled,
 	}, {
-		.mask	= KVM_PGTABLE_PROT_SW2,
+		.mask   = KVM_PGTABLE_PROT_SW2,
 		.val	= KVM_PGTABLE_PROT_SW2,
 		.set	= "SW2",
+		.feature_off	= is_pkvm_enabled,
 	}, {
 		.mask   = KVM_PGTABLE_PROT_SW3,
 		.val	= KVM_PGTABLE_PROT_SW3,
 		.set	= "SW3",
+		.feature_off	= is_pkvm_enabled,
 	},
 };
 
