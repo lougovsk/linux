@@ -25,11 +25,19 @@ static int kvm_ptdump_open(struct inode *inode, struct file *file);
 static int kvm_ptdump_release(struct inode *inode, struct file *file);
 static int kvm_ptdump_show(struct seq_file *m, void *);
 
+static phys_addr_t get_host_pa(void *addr);
+static void *get_host_va(phys_addr_t pa);
+
 static const struct file_operations kvm_ptdump_fops = {
 	.open		= kvm_ptdump_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= kvm_ptdump_release,
+};
+
+static struct kvm_pgtable_mm_ops ptdump_host_mmops = {
+	.phys_to_virt	= get_host_va,
+	.virt_to_phys	= get_host_pa,
 };
 
 static int kvm_ptdump_open(struct inode *inode, struct file *file)
@@ -78,10 +86,109 @@ static void kvm_ptdump_debugfs_register(struct kvm_ptdump_register *reg,
 
 static struct kvm_ptdump_register host_reg;
 
+static size_t host_stage2_get_pgd_len(void)
+{
+	u32 phys_shift = get_kvm_ipa_limit();
+	u64 vtcr = kvm_get_vtcr(read_sanitised_ftr_reg(SYS_ID_AA64MMFR0_EL1),
+				read_sanitised_ftr_reg(SYS_ID_AA64MMFR1_EL1),
+				phys_shift);
+	return (kvm_pgtable_stage2_pgd_size(vtcr) >> PAGE_SHIFT);
+}
+
+static phys_addr_t get_host_pa(void *addr)
+{
+	return __pa(addr);
+}
+
+static void *get_host_va(phys_addr_t pa)
+{
+	return __va(pa);
+}
+
+static void kvm_host_put_ptdump_info(void *snap)
+{
+	void *mc_page;
+	size_t i;
+	struct kvm_pgtable_snapshot *snapshot;
+
+	if (!snap)
+		return;
+
+	snapshot = snap;
+	while ((mc_page = pop_hyp_memcache(&snapshot->mc, get_host_va)) != NULL)
+		free_page((unsigned long)mc_page);
+
+	if (snapshot->pgd_hva)
+		free_pages_exact(snapshot->pgd_hva, snapshot->pgd_pages);
+
+	if (snapshot->used_pages_hva) {
+		for (i = 0; i < snapshot->used_pages_indx; i++) {
+			mc_page = get_host_va(snapshot->used_pages_hva[i]);
+			free_page((unsigned long)mc_page);
+		}
+
+		free_pages_exact(snapshot->used_pages_hva, snapshot->num_used_pages);
+	}
+
+	free_page((unsigned long)snapshot);
+}
+
+static void *kvm_host_get_ptdump_info(struct kvm_ptdump_register *reg)
+{
+	int i, ret;
+	void *mc_page;
+	struct kvm_pgtable_snapshot *snapshot;
+	size_t memcache_len;
+
+	snapshot = (void *)__get_free_page(GFP_KERNEL_ACCOUNT);
+	if (!snapshot)
+		return NULL;
+
+	memset(snapshot, 0, sizeof(struct kvm_pgtable_snapshot));
+
+	snapshot->pgd_pages = host_stage2_get_pgd_len();
+	snapshot->pgd_hva = alloc_pages_exact(snapshot->pgd_pages, GFP_KERNEL_ACCOUNT);
+	if (!snapshot->pgd_hva)
+		goto err;
+
+	memcache_len = (size_t)reg->priv;
+	for (i = 0; i < memcache_len; i++) {
+		mc_page = (void *)__get_free_page(GFP_KERNEL_ACCOUNT);
+		if (!mc_page)
+			goto err;
+
+		push_hyp_memcache(&snapshot->mc, mc_page, get_host_pa);
+	}
+
+	snapshot->num_used_pages = DIV_ROUND_UP(sizeof(phys_addr_t) * memcache_len,
+					     PAGE_SIZE);
+	snapshot->used_pages_hva = alloc_pages_exact(snapshot->num_used_pages,
+						  GFP_KERNEL_ACCOUNT);
+	if (!snapshot->used_pages_hva)
+		goto err;
+
+	ret = kvm_call_hyp_nvhe(__pkvm_host_stage2_snapshot, snapshot);
+	if (ret) {
+		pr_err("ERROR %d snapshot host pagetables\n", ret);
+		goto err;
+	}
+
+	snapshot->pgtable.pgd = get_host_va((phys_addr_t)snapshot->pgtable.pgd);
+	snapshot->pgtable.mm_ops = &ptdump_host_mmops;
+
+	return snapshot;
+err:
+	kvm_host_put_ptdump_info(snapshot);
+	return NULL;
+}
+
 void kvm_ptdump_register_host(void)
 {
 	if (!is_protected_kvm_enabled())
 		return;
+
+	host_reg.get_ptdump_info = kvm_host_get_ptdump_info;
+	host_reg.put_ptdump_info = kvm_host_put_ptdump_info;
 
 	kvm_ptdump_debugfs_register(&host_reg, "host_page_tables",
 				    kvm_debugfs_dir);
