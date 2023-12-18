@@ -40,6 +40,7 @@
 #include <asm/kvm_pkvm.h>
 #include <asm/kvm_emulate.h>
 #include <asm/sections.h>
+#include <kvm_ptdump.h>
 
 #include <kvm/arm_hypercalls.h>
 #include <kvm/arm_pmu.h>
@@ -2602,6 +2603,7 @@ static __init int kvm_arm_init(void)
 	if (err)
 		goto out_subs;
 
+	kvm_ptdump_register_host();
 	kvm_arm_initialised = true;
 
 	return 0;
