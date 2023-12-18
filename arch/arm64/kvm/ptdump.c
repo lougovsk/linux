@@ -40,6 +40,66 @@ static struct kvm_pgtable_mm_ops ptdump_host_mmops = {
 	.virt_to_phys	= get_host_pa,
 };
 
+static const struct prot_bits stage2_pte_bits[] = {
+	{
+		.mask	= PTE_VALID,
+		.val	= PTE_VALID,
+		.set	= " ",
+		.clear	= "F",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_HI_S2_XN,
+		.val	= KVM_PTE_LEAF_ATTR_HI_S2_XN,
+		.set	= "XN",
+		.clear	= "  ",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R,
+		.val	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R,
+		.set	= "R",
+		.clear	= " ",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W,
+		.val	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W,
+		.set	= "W",
+		.clear	= " ",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_AF,
+		.val	= KVM_PTE_LEAF_ATTR_LO_S2_AF,
+		.set	= "AF",
+		.clear	= "  ",
+	}, {
+		.mask	= PTE_NG,
+		.val	= PTE_NG,
+		.set	= "FnXS",
+		.clear	= "  ",
+	}, {
+		.mask	= PTE_CONT,
+		.val	= PTE_CONT,
+		.set	= "CON",
+		.clear	= "   ",
+	}, {
+		.mask	= PTE_TABLE_BIT,
+		.val	= PTE_TABLE_BIT,
+		.set	= "   ",
+		.clear	= "BLK",
+	}, {
+		.mask	= KVM_PGTABLE_PROT_SW0,
+		.val	= KVM_PGTABLE_PROT_SW0,
+		.set	= "SW0", /* PKVM_PAGE_SHARED_OWNED */
+	}, {
+		.mask   = KVM_PGTABLE_PROT_SW1,
+		.val	= KVM_PGTABLE_PROT_SW1,
+		.set	= "SW1", /* PKVM_PAGE_SHARED_BORROWED */
+	}, {
+		.mask	= KVM_PGTABLE_PROT_SW2,
+		.val	= KVM_PGTABLE_PROT_SW2,
+		.set	= "SW2",
+	}, {
+		.mask   = KVM_PGTABLE_PROT_SW3,
+		.val	= KVM_PGTABLE_PROT_SW3,
+		.set	= "SW3",
+	},
+};
+
 static int kvm_ptdump_open(struct inode *inode, struct file *file)
 {
 	struct kvm_ptdump_register *reg = inode->i_private;
@@ -73,9 +133,82 @@ static int kvm_ptdump_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
+static int kvm_ptdump_build_levels(struct pg_level *level, unsigned int start_level)
+{
+	static const char * const level_names[] = {"PGD", "PUD", "PMD", "PTE"};
+	int i, j, name_index;
+
+	if (start_level > 2) {
+		pr_err("invalid start_level %u\n", start_level);
+		return -EINVAL;
+	}
+
+	for (i = start_level; i < KVM_PGTABLE_MAX_LEVELS; i++) {
+		name_index = i - start_level;
+		name_index += name_index * start_level;
+
+		level[i].name	= level_names[name_index];
+		level[i].num	= ARRAY_SIZE(stage2_pte_bits);
+		level[i].bits	= stage2_pte_bits;
+
+		for (j = 0; j < level[i].num; j++)
+			level[i].mask |= level[i].bits[j].mask;
+	}
+
+	return 0;
+}
+
+static int kvm_ptdump_visitor(const struct kvm_pgtable_visit_ctx *ctx,
+			      enum kvm_pgtable_walk_flags visit)
+{
+	struct pg_state *st = ctx->arg;
+	struct ptdump_state *pt_st = &st->ptdump;
+
+	note_page(pt_st, ctx->addr, ctx->level, ctx->old);
+	return 0;
+}
+
 static int kvm_ptdump_show(struct seq_file *m, void *)
 {
-	return -EINVAL;
+	u64 ipa_size;
+	char ipa_description[32];
+	struct pg_state st;
+	struct addr_marker ipa_addr_markers[3] = {0};
+	struct pg_level pg_level_descr[KVM_PGTABLE_MAX_LEVELS] = {0};
+	struct kvm_pgtable_snapshot *snapshot = m->private;
+	struct kvm_pgtable *pgtable = &snapshot->pgtable;
+	struct kvm_pgtable_walker walker = (struct kvm_pgtable_walker) {
+		.cb	= kvm_ptdump_visitor,
+		.arg	= &st,
+		.flags	= KVM_PGTABLE_WALK_LEAF,
+	};
+
+	if (kvm_ptdump_build_levels(pg_level_descr, pgtable->start_level) < 0)
+		return -EINVAL;
+
+	snprintf(ipa_description, sizeof(ipa_description),
+		 "IPA bits %2u start lvl %1u", pgtable->ia_bits,
+		 pgtable->start_level);
+
+	ipa_size = BIT(pgtable->ia_bits);
+	ipa_addr_markers[0].name = ipa_description;
+	ipa_addr_markers[1].start_address = ipa_size;
+
+	st = (struct pg_state) {
+		.seq		= m,
+		.marker		= &ipa_addr_markers[0],
+		.level		= -1,
+		.pg_level	= &pg_level_descr[0],
+		.ptdump	= {
+			.note_page	= note_page,
+			.range		= (struct ptdump_range[]) {
+				{0, ipa_size},
+				{0, 0},
+			},
+		},
+	};
+
+	return kvm_pgtable_walk(pgtable, 0, ipa_size, &walker);
 }
 
 static void kvm_ptdump_debugfs_register(struct kvm_ptdump_register *reg,
