@@ -6,13 +6,16 @@
 #ifndef __KVM_PTDUMP_H
 #define __KVM_PTDUMP_H
 
+#include <linux/kvm_host.h>
 #include <asm/ptdump.h>
 
 
 #ifdef CONFIG_PTDUMP_STAGE2_DEBUGFS
 void kvm_ptdump_register_host(void);
+int kvm_ptdump_register_guest(struct kvm *kvm);
 #else
 static inline void kvm_ptdump_register_host(void) { }
+static inline int kvm_ptdump_register_guest(struct kvm *kvm) { return -1; }
 #endif /* CONFIG_PTDUMP_STAGE2_DEBUGFS */
 
 #endif /* __KVM_PTDUMP_H */

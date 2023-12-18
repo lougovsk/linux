@@ -181,6 +181,8 @@ static int kvm_ptdump_open(struct inode *inode, struct file *file)
 		info = reg->get_ptdump_info(reg);
 		if (!info)
 			return -ENOMEM;
+	} else {
+		info = inode->i_private;
 	}
 
 	if (!reg->show_ptdump_info)
@@ -239,15 +241,14 @@ static int kvm_ptdump_visitor(const struct kvm_pgtable_visit_ctx *ctx,
 	return 0;
 }
 
-static int kvm_ptdump_show(struct seq_file *m, void *)
+static int kvm_ptdump_show_common(struct seq_file *m,
+				  struct kvm_pgtable *pgtable)
 {
 	u64 ipa_size;
 	char ipa_description[32];
 	struct pg_state st;
 	struct addr_marker ipa_addr_markers[3] = {0};
 	struct pg_level pg_level_descr[KVM_PGTABLE_MAX_LEVELS] = {0};
-	struct kvm_pgtable_snapshot *snapshot = m->private;
-	struct kvm_pgtable *pgtable = &snapshot->pgtable;
 	struct kvm_pgtable_walker walker = (struct kvm_pgtable_walker) {
 		.cb	= kvm_ptdump_visitor,
 		.arg	= &st,
@@ -280,6 +281,26 @@ static int kvm_ptdump_show(struct seq_file *m, void *)
 	};
 
 	return kvm_pgtable_walk(pgtable, 0, ipa_size, &walker);
+}
+
+static int kvm_host_ptdump_show(struct seq_file *m, void *)
+{
+	struct kvm_pgtable_snapshot *snapshot = m->private;
+
+	return kvm_ptdump_show_common(m, &snapshot->pgtable);
+}
+
+static int kvm_ptdump_show(struct seq_file *m, void *)
+{
+	struct kvm *guest_kvm = m->private;
+	struct kvm_s2_mmu *mmu = &guest_kvm->arch.mmu;
+	int ret;
+
+	write_lock(&guest_kvm->mmu_lock);
+	ret = kvm_ptdump_show_common(m, mmu->pgt);
+	write_unlock(&guest_kvm->mmu_lock);
+
+	return ret;
 }
 
 static void kvm_ptdump_debugfs_register(struct kvm_ptdump_register *reg,
@@ -393,9 +414,17 @@ void kvm_ptdump_register_host(void)
 
 	host_reg.get_ptdump_info = kvm_host_get_ptdump_info;
 	host_reg.put_ptdump_info = kvm_host_put_ptdump_info;
+	host_reg.show_ptdump_info = kvm_host_ptdump_show;
 
 	kvm_ptdump_debugfs_register(&host_reg, "host_page_tables",
 				    kvm_debugfs_dir);
+}
+
+int kvm_ptdump_register_guest(struct kvm *kvm)
+{
+	debugfs_create_file("stage2_page_tables", 0400, kvm->debugfs_dentry,
+			    kvm, &kvm_ptdump_fops);
+	return 0;
 }
 
 static int __init kvm_host_ptdump_init(void)
