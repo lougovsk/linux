@@ -23,11 +23,18 @@ struct ptdump_info {
 	unsigned long			base_addr;
 };
 
+/* Forward declaration */
+struct pg_state;
+
 struct prot_bits {
 	u64		mask;
 	u64		val;
 	const char	*set;
 	const char	*clear;
+	/* bit ignored if the callback returns false */
+	bool		(*feature_on)(const struct pg_state *ctxt);
+	/* bit ignored if the callback returns true */
+	bool		(*feature_off)(const struct pg_state *ctxt);
 };
 
 struct pg_level {
