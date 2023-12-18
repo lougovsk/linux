@@ -10,6 +10,7 @@
 #include <linux/bits.h>
 #include <linux/kvm_host.h>
 #include <linux/types.h>
+#include <asm/kvm_host.h>
 
 #define KVM_PGTABLE_FIRST_LEVEL		-1
 #define KVM_PGTABLE_LAST_LEVEL		3
@@ -377,6 +378,28 @@ struct kvm_pgtable {
 	struct kvm_s2_mmu			*mmu;
 	enum kvm_pgtable_stage2_flags		flags;
 	kvm_pgtable_force_pte_cb_t		force_pte_cb;
+};
+
+/**
+ * struct kvm_pgtable_snapshot - Snapshot page-table wrapper.
+ * @pgtable:		The page-table configuration.
+ * @mc:			Memcache used for pagetable pages allocation.
+ * @pgd_hva:		Host virtual address of a physically contiguous buffer
+ *			used for storing the PGD.
+ * @pgd_pages:		The size of the phyisically contiguous buffer in pages.
+ * @used_pages_hva:	Host virtual address of a physically contiguous buffer
+ *			used for storing the consumed pages from the memcache.
+ * @num_used_pages		The size of the used buffer in pages.
+ * @used_pages_indx		The current index of the used pages array.
+ */
+struct kvm_pgtable_snapshot {
+	struct kvm_pgtable			pgtable;
+	struct kvm_hyp_memcache			mc;
+	void					*pgd_hva;
+	size_t					pgd_pages;
+	phys_addr_t				*used_pages_hva;
+	size_t					num_used_pages;
+	size_t					used_pages_indx;
 };
 
 /**
@@ -784,4 +807,24 @@ enum kvm_pgtable_prot kvm_pgtable_hyp_pte_prot(kvm_pte_t pte);
  */
 void kvm_tlb_flush_vmid_range(struct kvm_s2_mmu *mmu,
 				phys_addr_t addr, size_t size);
+
+#ifdef CONFIG_NVHE_EL2_DEBUG
+/**
+ * kvm_pgtable_stage2_snapshot() - Given a memcache and a destination
+ *				pagetable where we have the original PGD
+ *				copied, build a snapshot table with page table
+ *				pages from the given memcache.
+ *
+ * @to_pgt:	Destination pagetable
+ * @mc:		The memcache where we allocate the destination pagetables from
+ */
+int kvm_pgtable_stage2_snapshot(struct kvm_pgtable *to_pgt,
+				void *mc);
+#else
+static inline int kvm_pgtable_stage2_snapshot(struct kvm_pgtable *to_pgt,
+					      void *mc)
+{
+	return -EPERM;
+}
+#endif	/* CONFIG_NVHE_EL2_DEBUG */
 #endif	/* __ARM64_KVM_PGTABLE_H__ */

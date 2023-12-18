@@ -266,6 +266,192 @@ int kvm_guest_prepare_stage2(struct pkvm_hyp_vm *vm, void *pgd)
 	return 0;
 }
 
+#ifdef CONFIG_NVHE_EL2_DEBUG
+static void *snap_zalloc_page(void *mc)
+{
+	struct hyp_page *p;
+	void *addr;
+	struct kvm_pgtable_snapshot *snap;
+	phys_addr_t *used_pg;
+
+	snap = container_of(mc, struct kvm_pgtable_snapshot, mc);
+	used_pg = kern_hyp_va(snap->used_pages_hva);
+
+	/* Check if we have space to track the used page */
+	if (snap->used_pages_indx * sizeof(phys_addr_t) > snap->num_used_pages * PAGE_SIZE)
+		return NULL;
+
+	addr = pop_hyp_memcache(mc, hyp_phys_to_virt);
+	if (!addr)
+		return addr;
+	used_pg[snap->used_pages_indx++] = hyp_virt_to_phys(addr);
+
+	memset(addr, 0, PAGE_SIZE);
+	p = hyp_virt_to_page(addr);
+	memset(p, 0, sizeof(*p));
+
+	return addr;
+}
+
+static void snap_free_pages_exact(void *addr, unsigned long size)
+{
+	u8 order = get_order(size);
+	unsigned int i;
+	struct hyp_page *p;
+
+	for (i = 0; i < (1 << order); i++) {
+		p = hyp_virt_to_page(addr + (i * PAGE_SIZE));
+		hyp_page_ref_dec(p);
+	}
+}
+
+static void *pkvm_setup_snapshot(struct kvm_pgtable_snapshot *snap_hva)
+{
+	unsigned long i;
+	void *pgd, *used_pg;
+	phys_addr_t mc_page, next_mc_page;
+	struct kvm_pgtable_snapshot *snap;
+
+	snap = (void *)kern_hyp_va(snap_hva);
+	if (!PAGE_ALIGNED(snap))
+		return NULL;
+
+	if (__pkvm_host_donate_hyp(hyp_virt_to_pfn(snap), 1))
+		return NULL;
+
+	pgd = kern_hyp_va(snap->pgd_hva);
+	if (!PAGE_ALIGNED(pgd))
+		goto error_with_snapshot;
+
+	if (__pkvm_host_donate_hyp(hyp_virt_to_pfn(pgd), snap->pgd_pages))
+		goto error_with_snapshot;
+
+	mc_page = snap->mc.head;
+	for (i = 0; i < snap->mc.nr_pages; i++) {
+		if (!PAGE_ALIGNED(mc_page))
+			goto error_with_memcache;
+
+		if (__pkvm_host_donate_hyp(hyp_phys_to_pfn(mc_page), 1))
+			goto error_with_memcache;
+
+		mc_page = *((phys_addr_t *)hyp_phys_to_virt(mc_page));
+	}
+
+	used_pg = kern_hyp_va(snap->used_pages_hva);
+	if (!PAGE_ALIGNED(used_pg))
+		goto error_with_memcache;
+
+	if (__pkvm_host_donate_hyp(hyp_virt_to_pfn(used_pg), snap->num_used_pages))
+		goto error_with_memcache;
+
+	return snap;
+error_with_memcache:
+	mc_page = snap->mc.head;
+	for (; i >= 0; i--) {
+		next_mc_page = *((phys_addr_t *)hyp_phys_to_virt(mc_page));
+		WARN_ON(__pkvm_hyp_donate_host(hyp_phys_to_pfn(mc_page), 1));
+		mc_page = next_mc_page;
+	}
+
+	WARN_ON(__pkvm_hyp_donate_host(hyp_virt_to_pfn(pgd), snap->pgd_pages));
+error_with_snapshot:
+	WARN_ON(__pkvm_hyp_donate_host(hyp_virt_to_pfn(snap), 1));
+	return NULL;
+}
+
+static void pkvm_teardown_snapshot(struct kvm_pgtable_snapshot *snap)
+{
+	size_t i;
+	phys_addr_t mc_page, next_mc_page;
+	u64 *used_pg = kern_hyp_va(snap->used_pages_hva);
+	void *pgd = kern_hyp_va(snap->pgd_hva);
+
+	for (i = 0; i < snap->used_pages_indx; i++) {
+		mc_page = used_pg[i];
+		WARN_ON(__pkvm_hyp_donate_host(hyp_phys_to_pfn(mc_page), 1));
+	}
+
+	WARN_ON(__pkvm_hyp_donate_host(hyp_virt_to_pfn(used_pg),
+				       snap->num_used_pages));
+
+	mc_page = snap->mc.head;
+	for (i = 0; i < snap->mc.nr_pages; i++) {
+		next_mc_page = *((phys_addr_t *)hyp_phys_to_virt(mc_page));
+		WARN_ON(__pkvm_hyp_donate_host(hyp_phys_to_pfn(mc_page), 1));
+		mc_page = next_mc_page;
+	}
+
+	snap->pgtable.mm_ops = NULL;
+	WARN_ON(__pkvm_hyp_donate_host(hyp_virt_to_pfn(pgd), snap->pgd_pages));
+	WARN_ON(__pkvm_hyp_donate_host(hyp_virt_to_pfn(snap), 1));
+}
+
+static int pkvm_host_stage2_snapshot(struct kvm_pgtable_snapshot *snap)
+{
+	int ret;
+	void *pgd;
+	size_t required_pgd_len;
+	struct kvm_pgtable_mm_ops mm_ops = {0};
+	struct kvm_s2_mmu *mmu;
+	struct kvm_pgtable *to_pgt, *from_pgt;
+
+	if (snap->used_pages_indx != 0)
+		return -EINVAL;
+
+	from_pgt = &host_mmu.pgt;
+	mmu = &host_mmu.arch.mmu;
+	required_pgd_len = kvm_pgtable_stage2_pgd_size(mmu->vtcr);
+	if (snap->pgd_pages < (required_pgd_len >> PAGE_SHIFT))
+		return -ENOMEM;
+
+	if (snap->mc.nr_pages < host_s2_pgtable_pages())
+		return -ENOMEM;
+
+	to_pgt = &snap->pgtable;
+	pgd = kern_hyp_va(snap->pgd_hva);
+
+	mm_ops.zalloc_page		= snap_zalloc_page;
+	mm_ops.free_pages_exact		= snap_free_pages_exact;
+	mm_ops.phys_to_virt		= hyp_phys_to_virt;
+	mm_ops.virt_to_phys		= hyp_virt_to_phys;
+	mm_ops.page_count		= hyp_page_count;
+
+	to_pgt->ia_bits		= from_pgt->ia_bits;
+	to_pgt->start_level	= from_pgt->start_level;
+	to_pgt->flags		= from_pgt->flags;
+	to_pgt->mm_ops		= &mm_ops;
+
+	host_lock_component();
+
+	to_pgt->pgd = pgd;
+	memcpy(to_pgt->pgd, from_pgt->pgd, required_pgd_len);
+	ret = kvm_pgtable_stage2_snapshot(to_pgt, &snap->mc);
+
+	host_unlock_component();
+
+	return ret;
+}
+
+int __pkvm_host_stage2_snapshot(struct kvm_pgtable_snapshot *snap_hva)
+{
+	int ret;
+	struct kvm_pgtable_snapshot *snap;
+	kvm_pteref_t pgd;
+
+	snap = pkvm_setup_snapshot(snap_hva);
+	if (!snap)
+		return -EPERM;
+
+	ret = pkvm_host_stage2_snapshot(snap);
+	if (!ret) {
+		pgd = snap->pgtable.pgd;
+		snap->pgtable.pgd = (kvm_pteref_t)__hyp_pa(pgd);
+	}
+	pkvm_teardown_snapshot(snap);
+	return ret;
+}
+#endif /* CONFIG_NVHE_EL2_DEBUG */
+
 void reclaim_guest_pages(struct pkvm_hyp_vm *vm, struct kvm_hyp_memcache *mc)
 {
 	void *addr;

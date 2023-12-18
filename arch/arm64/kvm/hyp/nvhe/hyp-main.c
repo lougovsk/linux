@@ -314,6 +314,17 @@ static void handle___pkvm_teardown_vm(struct kvm_cpu_context *host_ctxt)
 	cpu_reg(host_ctxt, 1) = __pkvm_teardown_vm(handle);
 }
 
+static void handle___pkvm_host_stage2_snapshot(struct kvm_cpu_context *host_ctxt)
+{
+#ifdef CONFIG_NVHE_EL2_DEBUG
+	DECLARE_REG(struct kvm_pgtable_snapshot *, snapshot_hva, host_ctxt, 1);
+
+	cpu_reg(host_ctxt, 1) = __pkvm_host_stage2_snapshot(snapshot_hva);
+#else
+	cpu_reg(host_ctxt, 0) = SMCCC_RET_NOT_SUPPORTED;
+#endif
+}
+
 typedef void (*hcall_t)(struct kvm_cpu_context *);
 
 #define HANDLE_FUNC(x)	[__KVM_HOST_SMCCC_FUNC_##x] = (hcall_t)handle_##x
@@ -348,6 +359,7 @@ static const hcall_t host_hcall[] = {
 	HANDLE_FUNC(__pkvm_init_vm),
 	HANDLE_FUNC(__pkvm_init_vcpu),
 	HANDLE_FUNC(__pkvm_teardown_vm),
+	HANDLE_FUNC(__pkvm_host_stage2_snapshot),
 };
 
 static void handle_host_hcall(struct kvm_cpu_context *host_ctxt)
