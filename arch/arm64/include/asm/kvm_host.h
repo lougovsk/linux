@@ -238,6 +238,8 @@ static inline u16 kvm_mpidr_index(struct kvm_mpidr_data *data, u64 mpidr)
 	return index;
 }
 
+struct kvm_sysreg_masks;
+
 struct kvm_arch {
 	struct kvm_s2_mmu mmu;
 
@@ -311,6 +313,9 @@ struct kvm_arch {
 #define IDREG(kvm, id)		((kvm)->arch.id_regs[IDREG_IDX(id)])
 #define KVM_ARM_ID_REG_NUM	(IDREG_IDX(sys_reg(3, 0, 0, 7, 7)) + 1)
 	u64 id_regs[KVM_ARM_ID_REG_NUM];
+
+	/* Masks for VNCR-baked sysregs */
+	struct kvm_sysreg_masks	*sysreg_masks;
 
 	/*
 	 * For an untrusted host VM, 'pkvm.handle' is used to lookup
@@ -472,6 +477,13 @@ enum vcpu_sysreg {
 	VNCR(CNTP_CTL_EL0),
 
 	NR_SYS_REGS	/* Nothing after this line! */
+};
+
+struct kvm_sysreg_masks {
+	struct {
+		u64	res0;
+		u64	res1;
+	} mask[NR_SYS_REGS - __VNCR_START__];
 };
 
 struct kvm_cpu_context {
@@ -868,7 +880,20 @@ static inline u64 *__ctxt_sys_reg(const struct kvm_cpu_context *ctxt, int r)
 
 #define ctxt_sys_reg(c,r)	(*__ctxt_sys_reg(c,r))
 
+#if defined (__KVM_NVHE_HYPERVISOR__)
 #define __vcpu_sys_reg(v,r)	(ctxt_sys_reg(&(v)->arch.ctxt, (r)))
+#else
+u64 kvm_vcpu_sanitise_vncr_reg(const struct kvm_vcpu *, enum vcpu_sysreg);
+#define __vcpu_sys_reg(v,r)						\
+	(*({								\
+		const struct kvm_cpu_context *ctxt = &(v)->arch.ctxt;	\
+		u64 *__r = __ctxt_sys_reg(ctxt, (r));			\
+		if (unlikely(cpus_have_final_cap(ARM64_HAS_NESTED_VIRT) && \
+			     r >= __VNCR_START__ && ctxt->vncr_array))	\
+			*__r = kvm_vcpu_sanitise_vncr_reg((v), (r));	\
+		__r;							\
+	}))
+#endif
 
 u64 vcpu_read_sys_reg(const struct kvm_vcpu *vcpu, int reg);
 void vcpu_write_sys_reg(struct kvm_vcpu *vcpu, u64 val, int reg);
