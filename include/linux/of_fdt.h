@@ -57,6 +57,8 @@ extern const void *of_get_flat_dt_prop(unsigned long node, const char *name,
 extern int of_flat_dt_is_compatible(unsigned long node, const char *name);
 extern unsigned long of_get_flat_dt_root(void);
 extern uint32_t of_get_flat_dt_phandle(unsigned long node);
+extern int of_flat_read_u32(unsigned long node, const char *propname,
+			    u32 *out_value);
 
 extern int early_init_dt_scan_chosen(char *cmdline);
 extern int early_init_dt_scan_memory(void);

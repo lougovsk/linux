@@ -755,6 +755,27 @@ const void *__init of_get_flat_dt_prop(unsigned long node, const char *name,
 	return fdt_getprop(initial_boot_params, node, name, size);
 }
 
+/*
+ * of_flat_read_u32 - Return the value of the given property as an u32.
+ *
+ * @node: device node from which the property value is to be read
+ * @propname: name of the property
+ * @out_value: the value of the property
+ * @return: 0 on success, -EINVAL if property does not exist
+ */
+int __init of_flat_read_u32(unsigned long node, const char *propname,
+			    u32 *out_value)
+{
+	const __be32 *reg;
+
+	reg = of_get_flat_dt_prop(node, propname, NULL);
+	if (!reg)
+		return -EINVAL;
+
+	*out_value = be32_to_cpup(reg);
+	return 0;
+}
+
 /**
  * of_fdt_is_compatible - Return true if given node from the given blob has
  * compat in its compatible list
