@@ -38,6 +38,11 @@ static inline void khugepaged_exit(struct mm_struct *mm)
 	if (test_bit(MMF_VM_HUGEPAGE, &mm->flags))
 		__khugepaged_exit(mm);
 }
+
+#ifndef arch_hugepage_vma_revalidate
+#define arch_hugepage_vma_revalidate(vma, address) 1
+#endif
+
 #else /* CONFIG_TRANSPARENT_HUGEPAGE */
 static inline void khugepaged_fork(struct mm_struct *mm, struct mm_struct *oldmm)
 {

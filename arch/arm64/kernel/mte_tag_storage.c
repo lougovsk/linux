@@ -636,3 +636,8 @@ void arch_alloc_page(struct page *page, int order, gfp_t gfp)
 	if (tag_storage_enabled() && alloc_requires_tag_storage(gfp))
 		reserve_tag_storage(page, order, gfp);
 }
+
+bool arch_hugepage_vma_revalidate(struct vm_area_struct *vma, unsigned long address)
+{
+	return !(vma->vm_flags & VM_MTE);
+}

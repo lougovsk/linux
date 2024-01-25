@@ -1120,6 +1120,9 @@ static inline bool arch_alloc_cma(gfp_t gfp_mask)
 	return true;
 }
 
+bool arch_hugepage_vma_revalidate(struct vm_area_struct *vma, unsigned long address);
+#define arch_hugepage_vma_revalidate arch_hugepage_vma_revalidate
+
 #endif /* CONFIG_ARM64_MTE_TAG_STORAGE */
 #endif /* CONFIG_ARM64_MTE */
 

@@ -935,6 +935,10 @@ static int hugepage_vma_revalidate(struct mm_struct *mm, unsigned long address,
 	 */
 	if (expect_anon && (!(*vmap)->anon_vma || !vma_is_anonymous(*vmap)))
 		return SCAN_PAGE_ANON;
+
+	if (!arch_hugepage_vma_revalidate(vma, address))
+		return SCAN_VMA_CHECK;
+
 	return SCAN_SUCCEED;
 }
 
