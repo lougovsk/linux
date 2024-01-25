@@ -1014,6 +1014,7 @@ static int replace_folio_with_tagged(struct folio *folio)
 vm_fault_t handle_folio_missing_tag_storage(struct folio *folio, struct vm_fault *vmf,
 					    bool *map_pte)
 {
+	bool is_tag_storage = page_is_tag_storage(folio_page(folio, 0));
 	struct vm_area_struct *vma = vmf->vma;
 	int ret = 0;
 
@@ -1033,12 +1034,18 @@ vm_fault_t handle_folio_missing_tag_storage(struct folio *folio, struct vm_fault
 	if (unlikely(is_migrate_isolate_page(folio_page(folio, 0))))
 		goto out_retry;
 
-	ret = reserve_tag_storage(folio_page(folio, 0), folio_order(folio), GFP_HIGHUSER_MOVABLE);
-	if (ret) {
+	if (!is_tag_storage) {
+		ret = reserve_tag_storage(folio_page(folio, 0), folio_order(folio),
+					  GFP_HIGHUSER_MOVABLE);
+		if (!ret)
+			goto out_map;
+
 		/* replace_folio_with_tagged() is expensive, try to avoid it. */
 		if (fault_flag_allow_retry_first(vmf->flags))
 			goto out_retry;
+	}
 
+	if (ret || is_tag_storage) {
 		replace_folio_with_tagged(folio);
 		return 0;
 	}
