@@ -375,9 +375,11 @@ extern unsigned int kobjsize(const void *objp);
 #if defined(CONFIG_ARM64_MTE)
 # define VM_MTE		VM_HIGH_ARCH_0	/* Use Tagged memory for access control */
 # define VM_MTE_ALLOWED	VM_HIGH_ARCH_1	/* Tagged memory permitted */
+# define VM_MTE_KVM	VM_HIGH_ARCH_2	/* VMA is mapped in a virtual machine with MTE */
 #else
 # define VM_MTE		VM_NONE
 # define VM_MTE_ALLOWED	VM_NONE
+# define VM_MTE_KVM	VM_NONE
 #endif
 
 #ifndef VM_GROWSUP

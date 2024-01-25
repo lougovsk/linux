@@ -1420,7 +1420,7 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	unsigned long mmu_seq;
 	struct kvm *kvm = vcpu->kvm;
 	struct kvm_mmu_memory_cache *memcache = &vcpu->arch.mmu_page_cache;
-	struct vm_area_struct *vma;
+	struct vm_area_struct *vma, *old_vma;
 	short vma_shift;
 	gfn_t gfn;
 	kvm_pfn_t pfn;
@@ -1428,6 +1428,7 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	long vma_pagesize, fault_granule;
 	enum kvm_pgtable_prot prot = KVM_PGTABLE_PROT_R;
 	struct kvm_pgtable *pgt;
+	bool vma_has_kvm_mte = false;
 
 	if (fault_is_perm)
 		fault_granule = kvm_vcpu_trap_get_perm_fault_granule(vcpu);
@@ -1506,6 +1507,8 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 
 	gfn = fault_ipa >> PAGE_SHIFT;
 	mte_allowed = kvm_vma_mte_allowed(vma);
+	vma_has_kvm_mte = !!(vma->vm_flags & VM_MTE_KVM);
+	old_vma = vma;
 
 	/* Don't use the VMA after the unlock -- it may have vanished */
 	vma = NULL;
@@ -1520,6 +1523,27 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	 */
 	mmu_seq = vcpu->kvm->mmu_invalidate_seq;
 	mmap_read_unlock(current->mm);
+
+	/*
+	 * If the VMA was created after the memslot, it doesn't have the
+	 * VM_MTE_KVM flag set.
+	 */
+	if (unlikely(tag_storage_enabled() && !fault_is_perm &&
+	    kvm_has_mte(kvm) && mte_allowed && !vma_has_kvm_mte)) {
+		mmap_write_lock(current->mm);
+		vma = vma_lookup(current->mm, hva);
+		/* The VMA was changed, replay the fault. */
+		if (vma != old_vma) {
+			mmap_write_unlock(current->mm);
+			return 0;
+		}
+		if (!(vma->vm_flags & VM_MTE_KVM)) {
+			vma_start_write(vma);
+			vm_flags_reset(vma, vma->vm_flags | VM_MTE_KVM);
+		}
+		vma = NULL;
+		mmap_write_unlock(current->mm);
+	}
 
 	pfn = __gfn_to_pfn_memslot(memslot, gfn, false, false, NULL,
 				   write_fault, &writable, NULL);
@@ -1986,12 +2010,63 @@ out:
 	return err;
 }
 
+static int kvm_set_clear_kvm_mte_vma(const struct kvm_memory_slot *memslot, bool set)
+{
+	struct vm_area_struct *vma;
+	hva_t hva, memslot_end;
+	int ret = 0;
+
+	hva = memslot->userspace_addr;
+	memslot_end = hva + (memslot->npages << PAGE_SHIFT);
+
+	mmap_write_lock(current->mm);
+
+	do {
+		vma = find_vma_intersection(current->mm, hva, memslot_end);
+		if (!vma)
+			break;
+		if (!kvm_vma_mte_allowed(vma))
+			continue;
+		if (set) {
+			if (!(vma->vm_flags & VM_MTE_KVM)) {
+				vma_start_write(vma);
+				vm_flags_reset(vma, vma->vm_flags | VM_MTE_KVM);
+			}
+		} else if (vma->vm_flags & VM_MTE_KVM) {
+			vma_start_write(vma);
+			vm_flags_reset(vma, vma->vm_flags & ~VM_MTE_KVM);
+		}
+		hva = min(memslot_end, vma->vm_end);
+	} while (hva < memslot_end);
+
+	mmap_write_unlock(current->mm);
+
+	return ret;
+}
+
 void kvm_arch_commit_memory_region(struct kvm *kvm,
 				   struct kvm_memory_slot *old,
 				   const struct kvm_memory_slot *new,
 				   enum kvm_mr_change change)
 {
 	bool log_dirty_pages = new && new->flags & KVM_MEM_LOG_DIRTY_PAGES;
+
+	if (kvm_has_mte(kvm) && change != KVM_MR_FLAGS_ONLY) {
+		switch (change) {
+		case KVM_MR_CREATE:
+			kvm_set_clear_kvm_mte_vma(new, true);
+			break;
+		case KVM_MR_DELETE:
+			kvm_set_clear_kvm_mte_vma(old, false);
+			break;
+		case KVM_MR_MOVE:
+			kvm_set_clear_kvm_mte_vma(old, false);
+			kvm_set_clear_kvm_mte_vma(new, true);
+			break;
+		default:
+			WARN(true, "Unknown memslot change");
+		}
+	}
 
 	/*
 	 * At this point memslot has been committed and there is an
