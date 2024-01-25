@@ -165,10 +165,30 @@
 		};
 	};
 
-	memory@80000000 {
+	memory0: memory@80000000 {
 		device_type = "memory";
-		reg = <0x00000000 0x80000000 0 0x80000000>,
-		      <0x00000008 0x80000000 0 0x80000000>;
+		reg = <0x00 0x80000000 0x00 0x80000000>;
+		numa-node-id = <0x00>;
+	};
+
+	/* tags0 */
+	tags_memory0: memory@8f8000000 {
+		device_type = "memory";
+		reg = <0x08 0xf8000000 0x00 0x4000000>;
+		numa-node-id = <0x00>;
+	};
+
+	memory1: memory@880000000 {
+		device_type = "memory";
+		reg = <0x08 0x80000000 0x00 0x78000000>;
+		numa-node-id = <0x01>;
+	};
+
+	/* tags1 */
+	tags_memory1: memory@8fc00000 {
+		device_type = "memory";
+		reg = <0x08 0xfc000000 0x00 0x3c00000>;
+		numa-node-id = <0x01>;
 	};
 
 	reserved-memory {
@@ -182,6 +202,22 @@
 			compatible = "shared-dma-pool";
 			reg = <0x00000000 0x18000000 0 0x00800000>;
 			no-map;
+		};
+
+		tags0: tag-storage@8f8000000 {
+			compatible = "arm,mte-tag-storage";
+			reg = <0x08 0xf8000000 0x00 0x4000000>;
+			block-size = <0x1000>;
+			tagged-memory = <&memory0>;
+			reusable;
+		};
+
+		tags1: tag-storage@8fc00000 {
+			compatible = "arm,mte-tag-storage";
+			reg = <0x08 0xfc000000 0x00 0x3c00000>;
+			block-size = <0x1000>;
+			tagged-memory = <&memory1>;
+			reusable;
 		};
 	};
 
