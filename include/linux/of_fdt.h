@@ -36,7 +36,7 @@ extern char __dtb_start[];
 extern char __dtb_end[];
 
 /* Other Prototypes */
-extern u64 of_flat_dt_translate_address(unsigned long node);
+extern u64 of_flat_dt_translate_address(unsigned long node, u64 *out_size);
 extern void of_fdt_limit_memory(int limit);
 #endif /* CONFIG_OF_FLATTREE */
 
