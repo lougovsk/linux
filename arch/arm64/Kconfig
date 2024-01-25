@@ -2084,7 +2084,7 @@ config ARM64_MTE
 
 if ARM64_MTE
 config ARM64_MTE_TAG_STORAGE
-	bool
+	bool "MTE tag storage management"
 	select ARCH_HAS_FAULT_ON_ACCESS
 	select CONFIG_CMA
 	help
