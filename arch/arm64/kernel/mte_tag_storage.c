@@ -5,6 +5,8 @@
  * Copyright (C) 2023 ARM Ltd.
  */
 
+#include <linux/cma.h>
+#include <linux/log2.h>
 #include <linux/memblock.h>
 #include <linux/mm.h>
 #include <linux/of.h>
@@ -22,6 +24,7 @@ struct tag_region {
 	struct range tag_range;	/* Tag storage memory, in PFNs. */
 	u32 block_size_pages;	/* Tag block size, in pages. */
 	phandle mem_phandle;	/* phandle for the associated memory node. */
+	struct cma *cma;	/* CMA cookie */
 };
 
 #define MAX_TAG_REGIONS	32
@@ -139,9 +142,88 @@ out:
 	return -EINVAL;
 }
 
+static void __init mte_split_tag_region(struct tag_region *region, unsigned long last_tag_pfn)
+{
+	struct tag_region *new_region;
+	unsigned long last_mem_pfn;
+
+	new_region = &tag_regions[num_tag_regions];
+	last_mem_pfn = region->mem_range.start + (last_tag_pfn - region->tag_range.start) * 32;
+
+	new_region->mem_range.start = last_mem_pfn + 1;
+	new_region->mem_range.end = region->mem_range.end;
+	region->mem_range.end = last_mem_pfn;
+
+	new_region->tag_range.start = last_tag_pfn + 1;
+	new_region->tag_range.end = region->tag_range.end;
+	region->tag_range.end = last_tag_pfn;
+
+	new_region->block_size_pages = region->block_size_pages;
+
+	num_tag_regions++;
+}
+
+/*
+ * Split any tag region that spans multiple zones - CMA will fail if that
+ * happens.
+ */
+static int __init mte_split_tag_regions(void)
+{
+	struct tag_region *region;
+	struct range *tag_range;
+	struct zone *zone;
+	unsigned long pfn;
+	int i;
+
+	for (i = 0; i < num_tag_regions; i++) {
+		region = &tag_regions[i];
+		tag_range = &region->tag_range;
+		zone = page_zone(pfn_to_page(tag_range->start));
+
+		for (pfn = tag_range->start + 1; pfn <= tag_range->end; pfn++) {
+			if (page_zone(pfn_to_page(pfn)) == zone)
+				continue;
+
+			if (WARN_ON_ONCE(pfn % region->block_size_pages))
+				goto out_err;
+
+			if (num_tag_regions == MAX_TAG_REGIONS)
+				goto out_err;
+
+			mte_split_tag_region(&tag_regions[i], pfn - 1);
+			/* Move on to the next region. */
+			break;
+		}
+	}
+
+	return 0;
+
+out_err:
+	pr_err("Error splitting tag storage region 0x%llx-0x%llx spanning multiple zones",
+		PFN_PHYS(tag_range->start), PFN_PHYS(tag_range->end + 1) - 1);
+	return -EINVAL;
+}
+
 void __init mte_init_tag_storage(void)
 {
-	int ret;
+	unsigned long long mem_end;
+	struct tag_region *region;
+	unsigned long pfn, order;
+	u64 start, end;
+	int i, j, ret;
+
+	/*
+	 * Tag storage memory requires that tag storage pages in use for data
+	 * are always migratable when they need to be repurposed to store tags.
+	 * If ARCH_KEEP_MEMBLOCK is enabled, kexec will not scan reserved
+	 * memblocks when trying to find a suitable location for the kernel
+	 * image. This means that kexec will not use tag storage pages for
+	 * copying the kernel, and the pages will remain migratable.
+	 *
+	 * Add the check in case arm64 stops selecting ARCH_KEEP_MEMBLOCK by
+	 * default.
+	 */
+	BUILD_BUG_ON(!IS_ENABLED(CONFIG_ARCH_KEEP_MEMBLOCK));
 
 	if (num_tag_regions == 0)
 		return;
@@ -149,6 +231,72 @@ void __init mte_init_tag_storage(void)
 	ret = mte_find_tagged_memory_regions();
 	if (ret)
 		goto out_disabled;
+
+	mem_end = PHYS_PFN(memblock_end_of_DRAM());
+
+	/*
+	 * MTE is disabled, tag storage pages can be used like any other pages.
+	 * The only restriction is that the pages cannot be used by kexec
+	 * because the memory remains marked as reserved in the memblock
+	 * allocator.
+	 */
+	if (!system_supports_mte()) {
+		for (i = 0; i< num_tag_regions; i++) {
+			start = tag_regions[i].tag_range.start;
+			end = tag_regions[i].tag_range.end;
+
+			/* end is inclusive, mem_end is not */
+			if (end >= mem_end)
+				end = mem_end - 1;
+			if (end < start)
+				continue;
+			for (pfn = start; pfn <= end; pfn++)
+				free_reserved_page(pfn_to_page(pfn));
+		}
+		goto out_disabled;
+	}
+
+	/*
+	 * Check that tag storage is addressable by the kernel.
+	 * cma_init_reserved_mem(), unlike cma_declare_contiguous_nid(), doesn't
+	 * perform this check.
+	 */
+	for (i = 0; i< num_tag_regions; i++) {
+		start = tag_regions[i].tag_range.start;
+		end = tag_regions[i].tag_range.end;
+
+		if (end >= mem_end) {
+			pr_err("Tag region 0x%llx-0x%llx outside addressable memory",
+				PFN_PHYS(start), PFN_PHYS(end + 1) - 1);
+			goto out_disabled;
+		}
+	}
+
+	ret = mte_split_tag_regions();
+	if (ret)
+		goto out_disabled;
+
+	for (i = 0; i < num_tag_regions; i++) {
+		region = &tag_regions[i];
+
+		/* Tag storage pages are managed in block_size_pages chunks. */
+		if (is_power_of_2(region->block_size_pages))
+			order = ilog2(region->block_size_pages);
+		else
+			order = 0;
+
+		ret = cma_init_reserved_mem(PFN_PHYS(region->tag_range.start),
+				PFN_PHYS(range_len(&region->tag_range)),
+				order, NULL, &region->cma);
+		if (ret) {
+			for (j = 0; j < i; j++)
+				cma_remove_mem(&region->cma);
+			goto out_disabled;
+		}
+
+		/* Keep pages reserved if activation fails. */
+		cma_reserve_pages_on_error(region->cma);
+	}
 
 	return;
 
