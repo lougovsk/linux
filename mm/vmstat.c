@@ -1340,6 +1340,8 @@ const char * const vmstat_text[] = {
 #ifdef CONFIG_CMA
 	"cma_alloc_success",
 	"cma_alloc_fail",
+	"cma_release_success",
+	"cma_release_fail",
 #endif
 	"unevictable_pgs_culled",
 	"unevictable_pgs_scanned",

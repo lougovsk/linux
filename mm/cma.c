@@ -562,8 +562,10 @@ bool cma_release(struct cma *cma, const struct page *pages,
 {
 	unsigned long pfn;
 
-	if (!cma_pages_valid(cma, pages, count))
+	if (!cma_pages_valid(cma, pages, count)) {
+		count_vm_events(CMA_RELEASE_FAIL, count);
 		return false;
+	}
 
 	pr_debug("%s(page %p, count %lu)\n", __func__, (void *)pages, count);
 
@@ -574,6 +576,8 @@ bool cma_release(struct cma *cma, const struct page *pages,
 	free_contig_range(pfn, count);
 	cma_clear_bitmap(cma, pfn, count);
 	trace_cma_release(cma->name, pfn, pages, count);
+
+	count_vm_events(CMA_RELEASE_SUCCESS, count);
 
 	return true;
 }
