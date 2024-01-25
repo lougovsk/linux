@@ -412,10 +412,13 @@ static int __access_remote_tags(struct mm_struct *mm, unsigned long addr,
 	while (len) {
 		struct vm_area_struct *vma;
 		unsigned long tags, offset;
+		unsigned int fault_flags;
+		struct page *page;
+		vm_fault_t ret;
 		void *maddr;
-		struct page *page = get_user_page_vma_remote(mm, addr,
-							     gup_flags, &vma);
 
+get_page:
+		page = get_user_page_vma_remote(mm, addr, gup_flags, &vma);
 		if (IS_ERR(page)) {
 			err = PTR_ERR(page);
 			break;
@@ -433,6 +436,25 @@ static int __access_remote_tags(struct mm_struct *mm, unsigned long addr,
 			put_page(page);
 			break;
 		}
+
+		if (tag_storage_enabled() && !page_tag_storage_reserved(page)) {
+			fault_flags = FAULT_FLAG_DEFAULT | \
+				      FAULT_FLAG_USER | \
+				      FAULT_FLAG_REMOTE | \
+				      FAULT_FLAG_ALLOW_RETRY | \
+				      FAULT_FLAG_RETRY_NOWAIT;
+			if (write)
+				fault_flags |= FAULT_FLAG_WRITE;
+
+			put_page(page);
+			ret = handle_mm_fault(vma, addr, fault_flags, NULL);
+			if (ret & VM_FAULT_ERROR) {
+				err = -EFAULT;
+				break;
+			}
+			goto get_page;
+		}
+
 		WARN_ON_ONCE(!page_mte_tagged(page));
 
 		/* limit access to the end of the page */
