@@ -444,6 +444,34 @@ static void cma_debug_show_areas(struct cma *cma)
 static inline void cma_debug_show_areas(struct cma *cma) { }
 #endif
 
+/* Called with the cma mutex held. */
+static int cma_alloc_pages_fastpath(struct cma *cma, unsigned long start,
+				    unsigned long end)
+{
+	bool success = false;
+	unsigned long i, j;
+
+	/* Avoid contention on the zone lock. */
+	if (start - end != 1 << cma->order_per_bit)
+		return -EINVAL;
+
+	for (i = start; i < end; i++) {
+		if (!is_free_buddy_page(pfn_to_page(i)))
+			break;
+		success = take_page_off_buddy(pfn_to_page(i), false);
+		if (!success)
+			break;
+	}
+
+	if (success)
+		return 0;
+
+	for (j = start; j < i; j++)
+		put_page_back_buddy(pfn_to_page(j), false);
+
+	return -EBUSY;
+}
+
 /**
  * cma_alloc_range() - allocate pages in a specific range
  * @cma:   Contiguous memory region for which the allocation is performed.
@@ -493,7 +521,11 @@ int cma_alloc_range(struct cma *cma, unsigned long start, unsigned long count,
 
 	for (i = 0; i < tries; i++) {
 		mutex_lock(&cma_mutex);
-		err = alloc_contig_range(start, start + count, MIGRATE_CMA, gfp);
+		err = cma_alloc_pages_fastpath(cma, start, start + count);
+		if (err) {
+			err = alloc_contig_range(start, start + count,
+						 MIGRATE_CMA, gfp);
+		}
 		mutex_unlock(&cma_mutex);
 
 		if (err != -EBUSY)
@@ -528,7 +560,6 @@ out_stats:
 
 	return err;
 }
-
 
 /**
  * cma_alloc() - allocate pages from contiguous area
@@ -589,8 +620,11 @@ struct page *cma_alloc(struct cma *cma, unsigned long count,
 
 		pfn = cma->base_pfn + (bitmap_no << cma->order_per_bit);
 		mutex_lock(&cma_mutex);
-		ret = alloc_contig_range(pfn, pfn + count, MIGRATE_CMA,
-				     GFP_KERNEL | (no_warn ? __GFP_NOWARN : 0));
+		ret = cma_alloc_pages_fastpath(cma, pfn, pfn + count);
+		if (ret) {
+			ret = alloc_contig_range(pfn, pfn + count, MIGRATE_CMA,
+					GFP_KERNEL | (no_warn ? __GFP_NOWARN : 0));
+		}
 		mutex_unlock(&cma_mutex);
 		if (ret == 0) {
 			page = pfn_to_page(pfn);

@@ -745,12 +745,16 @@ config DEFAULT_MMAP_MIN_ADDR
 config ARCH_SUPPORTS_MEMORY_FAILURE
 	bool
 
+config WANTS_TAKE_PAGE_OFF_BUDDY
+	bool
+
 config MEMORY_FAILURE
 	depends on MMU
 	depends on ARCH_SUPPORTS_MEMORY_FAILURE
 	bool "Enable recovery from hardware memory errors"
 	select MEMORY_ISOLATION
 	select RAS
+	select WANTS_TAKE_PAGE_OFF_BUDDY
 	help
 	  Enables code to recover from some memory failures on systems
 	  with MCA recovery. This allows a system to continue running
@@ -891,6 +895,7 @@ config CMA
 	depends on MMU
 	select MIGRATION
 	select MEMORY_ISOLATION
+	select WANTS_TAKE_PAGE_OFF_BUDDY
 	help
 	  This enables the Contiguous Memory Allocator which allows other
 	  subsystems to allocate big physically-contiguous blocks of memory.
