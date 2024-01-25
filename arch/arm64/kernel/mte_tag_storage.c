@@ -257,6 +257,16 @@ void __init mte_init_tag_storage(void)
 	}
 
 	/*
+	 * The kernel allocates memory in non-preemptible contexts, which makes
+	 * migration impossible when reserving the associated tag storage. The
+	 * only in-kernel user of tagged pages is HW KASAN.
+	 */
+	if (kasan_hw_tags_enabled()) {
+		pr_info("KASAN HW tags incompatible with MTE tag storage management");
+		goto out_disabled;
+	}
+
+	/*
 	 * Check that tag storage is addressable by the kernel.
 	 * cma_init_reserved_mem(), unlike cma_declare_contiguous_nid(), doesn't
 	 * perform this check.
