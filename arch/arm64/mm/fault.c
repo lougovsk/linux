@@ -12,6 +12,8 @@
 #include <linux/extable.h>
 #include <linux/kfence.h>
 #include <linux/signal.h>
+#include <linux/memcontrol.h>
+#include <linux/migrate.h>
 #include <linux/mm.h>
 #include <linux/hardirq.h>
 #include <linux/init.h>
@@ -19,6 +21,7 @@
 #include <linux/kprobes.h>
 #include <linux/uaccess.h>
 #include <linux/page-flags.h>
+#include <linux/page-isolation.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/debug.h>
 #include <linux/highmem.h>
@@ -962,3 +965,98 @@ void tag_clear_highpage(struct page *page)
 	mte_zero_clear_page_tags(page_address(page));
 	set_page_mte_tagged(page);
 }
+
+#ifdef CONFIG_ARM64_MTE_TAG_STORAGE
+
+#define MR_TAG_STORAGE	MR_ARCH_1
+
+/*
+ * Called with an elevated reference on the folio.
+ * Returns with the elevated reference dropped.
+ */
+static int replace_folio_with_tagged(struct folio *folio)
+{
+	struct migration_target_control mtc = {
+		.nid = NUMA_NO_NODE,
+		.gfp_mask = GFP_HIGHUSER_MOVABLE | __GFP_TAGGED,
+	};
+	LIST_HEAD(foliolist);
+	int ret, tries;
+
+	lru_cache_disable();
+
+	if (!folio_isolate_lru(folio)) {
+		lru_cache_enable();
+		folio_put(folio);
+		return -EAGAIN;
+	}
+
+	/* Isolate just grabbed another reference, drop ours. */
+	folio_put(folio);
+	list_add_tail(&folio->lru, &foliolist);
+
+	tries = 3;
+	while (tries--) {
+		ret = migrate_pages(&foliolist, alloc_migration_target, NULL, (unsigned long)&mtc,
+				    MIGRATE_SYNC, MR_TAG_STORAGE, NULL);
+		if (ret != -EBUSY)
+			break;
+	}
+
+	if (ret != 0)
+		putback_movable_pages(&foliolist);
+
+	lru_cache_enable();
+
+	return ret;
+}
+
+vm_fault_t handle_folio_missing_tag_storage(struct folio *folio, struct vm_fault *vmf,
+					    bool *map_pte)
+{
+	struct vm_area_struct *vma = vmf->vma;
+	int ret = 0;
+
+	*map_pte = false;
+
+	/*
+	 * This should never happen, once a VMA has been marked as tagged, that
+	 * cannot be changed.
+	 */
+	if (WARN_ON_ONCE(!(vma->vm_flags & VM_MTE)))
+		goto out_map;
+
+	/*
+	 * The folio is probably being isolated for migration, replay the fault
+	 * to give time for the entry to be replaced by a migration pte.
+	 */
+	if (unlikely(is_migrate_isolate_page(folio_page(folio, 0))))
+		goto out_retry;
+
+	ret = reserve_tag_storage(folio_page(folio, 0), folio_order(folio), GFP_HIGHUSER_MOVABLE);
+	if (ret) {
+		/* replace_folio_with_tagged() is expensive, try to avoid it. */
+		if (fault_flag_allow_retry_first(vmf->flags))
+			goto out_retry;
+
+		replace_folio_with_tagged(folio);
+		return 0;
+	}
+
+out_map:
+	folio_put(folio);
+	*map_pte = true;
+	return 0;
+
+out_retry:
+	folio_put(folio);
+	if (fault_flag_allow_retry_first(vmf->flags)) {
+		/* Flag set by GUP. */
+		if (!(vmf->flags & FAULT_FLAG_RETRY_NOWAIT))
+			release_fault_lock(vmf);
+		return VM_FAULT_RETRY;
+	}
+	/* Replay the fault. */
+	return 0;
+}
+#endif
