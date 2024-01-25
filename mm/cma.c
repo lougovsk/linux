@@ -417,6 +417,92 @@ static inline void cma_debug_show_areas(struct cma *cma) { }
 #endif
 
 /**
+ * cma_alloc_range() - allocate pages in a specific range
+ * @cma:   Contiguous memory region for which the allocation is performed.
+ * @start: Starting pfn of the allocation.
+ * @count: Requested number of pages
+ * @tries: Number of tries if the range is busy
+ * @no_warn: Avoid printing message about failed allocation
+ *
+ * This function allocates part of contiguous memory from a specific contiguous
+ * memory area, from the specified starting address. The 'start' pfn and the the
+ * 'count' number of pages must be aligned to the CMA bitmap order per bit.
+ */
+int cma_alloc_range(struct cma *cma, unsigned long start, unsigned long count,
+		    unsigned tries, gfp_t gfp)
+{
+	unsigned long bitmap_maxno, bitmap_no, bitmap_start, bitmap_count;
+	unsigned long i = 0;
+	struct page *page;
+	int err = -EINVAL;
+
+	if (!cma || !cma->count || !cma->bitmap)
+		goto out_stats;
+
+	trace_cma_alloc_range_start(cma->name, start, count, tries);
+
+	if (!count || start < cma->base_pfn ||
+	    start + count > cma->base_pfn + cma->count)
+		goto out_stats;
+
+	if (!IS_ALIGNED(start | count, 1 << cma->order_per_bit))
+		goto out_stats;
+
+	bitmap_start = (start - cma->base_pfn) >> cma->order_per_bit;
+	bitmap_maxno = cma_bitmap_maxno(cma);
+	bitmap_count = cma_bitmap_pages_to_bits(cma, count);
+
+	spin_lock_irq(&cma->lock);
+	bitmap_no = bitmap_find_next_zero_area(cma->bitmap, bitmap_maxno,
+					       bitmap_start, bitmap_count, 0);
+	if (bitmap_no != bitmap_start) {
+		spin_unlock_irq(&cma->lock);
+		err = -EEXIST;
+		goto out_stats;
+	}
+	bitmap_set(cma->bitmap, bitmap_start, bitmap_count);
+	spin_unlock_irq(&cma->lock);
+
+	for (i = 0; i < tries; i++) {
+		mutex_lock(&cma_mutex);
+		err = alloc_contig_range(start, start + count, MIGRATE_CMA, gfp);
+		mutex_unlock(&cma_mutex);
+
+		if (err != -EBUSY)
+			break;
+	}
+
+	if (err) {
+		cma_clear_bitmap(cma, start, count);
+	} else {
+		page = pfn_to_page(start);
+
+		/*
+		 * CMA can allocate multiple page blocks, which results in
+		 * different blocks being marked with different tags. Reset the
+		 * tags to ignore those page blocks.
+		 */
+		for (i = 0; i < count; i++)
+			page_kasan_tag_reset(nth_page(page, i));
+	}
+
+out_stats:
+	trace_cma_alloc_range_finish(cma->name, start, count, i, err);
+
+	if (err) {
+		count_vm_events(CMA_ALLOC_FAIL, count);
+		if (cma)
+			cma_sysfs_account_fail_pages(cma, count);
+	} else {
+		count_vm_events(CMA_ALLOC_SUCCESS, count);
+		cma_sysfs_account_success_pages(cma, count);
+	}
+
+	return err;
+}
+
+
+/**
  * cma_alloc() - allocate pages from contiguous area
  * @cma:   Contiguous memory region for which the allocation is performed.
  * @count: Requested number of pages.

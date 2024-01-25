@@ -36,6 +36,65 @@ TRACE_EVENT(cma_release,
 		  __entry->count)
 );
 
+TRACE_EVENT(cma_alloc_range_start,
+
+	TP_PROTO(const char *name, unsigned long start, unsigned long count,
+		 unsigned tries),
+
+	TP_ARGS(name, start, count, tries),
+
+	TP_STRUCT__entry(
+		__string(name, name)
+		__field(unsigned long, start)
+		__field(unsigned long, count)
+		__field(unsigned, tries)
+	),
+
+	TP_fast_assign(
+		__assign_str(name, name);
+		__entry->start = start;
+		__entry->count = count;
+		__entry->tries = tries;
+	),
+
+	TP_printk("name=%s start=%lx count=%lu tries=%u",
+		  __get_str(name),
+		  __entry->start,
+		  __entry->count,
+		  __entry->tries)
+);
+
+TRACE_EVENT(cma_alloc_range_finish,
+
+	TP_PROTO(const char *name, unsigned long start, unsigned long count,
+		 unsigned attempts, int err),
+
+	TP_ARGS(name, start, count, attempts, err),
+
+	TP_STRUCT__entry(
+		__string(name, name)
+		__field(unsigned long, start)
+		__field(unsigned long, count)
+		__field(unsigned, attempts)
+		__field(int, err)
+	),
+
+	TP_fast_assign(
+		__assign_str(name, name);
+		__entry->start = start;
+		__entry->count = count;
+		__entry->attempts = attempts;
+		__entry->err = err;
+	),
+
+	TP_printk("name=%s start=%lx count=%lu attempts=%u err=%d",
+		  __get_str(name),
+		  __entry->start,
+		  __entry->count,
+		  __entry->attempts,
+		  __entry->err)
+);
+
 TRACE_EVENT(cma_alloc_start,
 
 	TP_PROTO(const char *name, unsigned long count, unsigned int align),
