@@ -35,6 +35,11 @@ void copy_highpage(struct page *to, struct page *from);
 void tag_clear_highpage(struct page *to);
 #define __HAVE_ARCH_TAG_CLEAR_HIGHPAGE
 
+#ifdef CONFIG_ARM64_MTE_TAG_STORAGE
+void arch_alloc_page(struct page *, int order, gfp_t gfp);
+#define HAVE_ARCH_ALLOC_PAGE
+#endif
+
 #define clear_user_page(page, vaddr, pg)	clear_page(page)
 #define copy_user_page(to, from, vaddr, pg)	copy_page(to, from)
 

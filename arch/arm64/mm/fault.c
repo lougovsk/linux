@@ -37,6 +37,7 @@
 #include <asm/esr.h>
 #include <asm/kprobes.h>
 #include <asm/mte.h>
+#include <asm/mte_tag_storage.h>
 #include <asm/processor.h>
 #include <asm/sysreg.h>
 #include <asm/system_misc.h>
@@ -950,6 +951,12 @@ gfp_t arch_calc_vma_gfp(struct vm_area_struct *vma, gfp_t gfp)
 
 void tag_clear_highpage(struct page *page)
 {
+	if (tag_storage_enabled() && !page_tag_storage_reserved(page)) {
+		/* Don't zero the tags if tag storage is not reserved */
+		clear_page(page_address(page));
+		return;
+	}
+
 	/* Newly allocated page, shouldn't have been tagged yet */
 	WARN_ON_ONCE(!try_page_mte_tagging(page));
 	mte_zero_clear_page_tags(page_address(page));
