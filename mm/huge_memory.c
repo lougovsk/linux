@@ -1708,7 +1708,7 @@ struct page *follow_trans_huge_pmd(struct vm_area_struct *vma,
 }
 
 /* NUMA hinting page fault entry point for trans huge pmds */
-vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
+vm_fault_t handle_huge_pmd_protnone(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	pmd_t oldpmd = vmf->orig_pmd;
@@ -1718,6 +1718,7 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 	int nid = NUMA_NO_NODE;
 	int target_nid, last_cpupid = (-1 & LAST_CPUPID_MASK);
 	bool migrated = false, writable = false;
+	vm_fault_t ret;
 	int flags = 0;
 
 	vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
@@ -1740,6 +1741,20 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 	folio = vm_normal_folio_pmd(vma, haddr, pmd);
 	if (!folio)
 		goto out_map;
+
+	folio_get(folio);
+	vma_set_access_pid_bit(vma);
+
+	if (arch_fault_on_access_pmd(oldpmd)) {
+		bool map_pte = false;
+
+		spin_unlock(vmf->ptl);
+		ret = arch_handle_folio_fault_on_access(folio, vmf, &map_pte);
+		if (ret || !map_pte)
+			return ret;
+		writable = false;
+		goto out_lock_and_map;
+	}
 
 	/* See similar comment in do_numa_page for explanation */
 	if (!writable)
@@ -1765,15 +1780,18 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 	if (migrated) {
 		flags |= TNF_MIGRATED;
 		nid = target_nid;
-	} else {
-		flags |= TNF_MIGRATE_FAIL;
-		vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
-		if (unlikely(!pmd_same(oldpmd, *vmf->pmd))) {
-			spin_unlock(vmf->ptl);
-			goto out;
-		}
-		goto out_map;
+		goto out;
 	}
+
+	flags |= TNF_MIGRATE_FAIL;
+
+out_lock_and_map:
+	vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
+	if (unlikely(!pmd_same(oldpmd, *vmf->pmd))) {
+		spin_unlock(vmf->ptl);
+		goto out;
+	}
+	goto out_map;
 
 out:
 	if (nid != NUMA_NO_NODE)

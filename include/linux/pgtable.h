@@ -1455,7 +1455,7 @@ static inline int pud_trans_unstable(pud_t *pud)
 	return 0;
 }
 
-#ifndef CONFIG_NUMA_BALANCING
+#if !defined(CONFIG_NUMA_BALANCING) && !defined(CONFIG_ARCH_HAS_FAULT_ON_ACCESS)
 /*
  * In an inaccessible (PROT_NONE) VMA, pte_protnone() may indicate "yes". It is
  * perfectly valid to indicate "no" in that case, which is why our default
@@ -1477,7 +1477,50 @@ static inline int pmd_protnone(pmd_t pmd)
 {
 	return 0;
 }
-#endif /* CONFIG_NUMA_BALANCING */
+#endif /* !CONFIG_NUMA_BALANCING && !CONFIG_ARCH_HAS_FAULT_ON_ACCESS */
+
+#ifndef CONFIG_ARCH_HAS_FAULT_ON_ACCESS
+static inline bool arch_fault_on_access_pte(pte_t pte)
+{
+	return false;
+}
+
+static inline bool arch_fault_on_access_pmd(pmd_t pmd)
+{
+	return false;
+}
+
+/*
+ * The function is called with the fault lock held and an elevated reference on
+ * the folio.
+ *
+ * Rules that an arch implementation of the function must follow:
+ *
+ * 1. The function must return with the elevated reference dropped.
+ *
+ * 2. If the return value contains VM_FAULT_RETRY or VM_FAULT_COMPLETED then:
+ *
+ * - if FAULT_FLAG_RETRY_NOWAIT is not set, the function must return with the
+ *   correct fault lock released, which can be accomplished with
+ *   release_fault_lock(vmf). Note that release_fault_lock() doesn't check if
+ *   FAULT_FLAG_RETRY_NOWAIT is set before releasing the mmap_lock.
+ *
+ * - if FAULT_FLAG_RETRY_NOWAIT is set, then the function must not release the
+ *   mmap_lock. The flag should be set only if the mmap_lock is held.
+ *
+ * 3. If the return value contains neither of the above, the function must not
+ * release the fault lock; the generic fault handler will take care of releasing
+ * the correct lock.
+ */
+static inline vm_fault_t arch_handle_folio_fault_on_access(struct folio *folio,
+							   struct vm_fault *vmf,
+							   bool *map_pte)
+{
+	*map_pte = false;
+
+	return VM_FAULT_SIGBUS;
+}
+#endif
 
 #endif /* CONFIG_MMU */
 

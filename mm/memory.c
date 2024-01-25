@@ -4886,11 +4886,6 @@ static vm_fault_t do_fault(struct vm_fault *vmf)
 int numa_migrate_prep(struct folio *folio, struct vm_area_struct *vma,
 		      unsigned long addr, int page_nid, int *flags)
 {
-	folio_get(folio);
-
-	/* Record the current PID acceesing VMA */
-	vma_set_access_pid_bit(vma);
-
 	count_vm_numa_event(NUMA_HINT_FAULTS);
 	if (page_nid == numa_node_id()) {
 		count_vm_numa_event(NUMA_HINT_FAULTS_LOCAL);
@@ -4900,13 +4895,14 @@ int numa_migrate_prep(struct folio *folio, struct vm_area_struct *vma,
 	return mpol_misplaced(folio, vma, addr);
 }
 
-static vm_fault_t do_numa_page(struct vm_fault *vmf)
+static vm_fault_t handle_pte_protnone(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	struct folio *folio = NULL;
 	int nid = NUMA_NO_NODE;
 	bool writable = false;
 	int last_cpupid;
+	vm_fault_t ret;
 	int target_nid;
 	pte_t pte, old_pte;
 	int flags = 0;
@@ -4938,6 +4934,20 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	folio = vm_normal_folio(vma, vmf->address, pte);
 	if (!folio || folio_is_zone_device(folio))
 		goto out_map;
+
+	folio_get(folio);
+	/* Record the current PID acceesing VMA */
+	vma_set_access_pid_bit(vma);
+
+	if (arch_fault_on_access_pte(old_pte)) {
+		bool map_pte = false;
+
+		pte_unmap_unlock(vmf->pte, vmf->ptl);
+		ret = arch_handle_folio_fault_on_access(folio, vmf, &map_pte);
+		if (ret || !map_pte)
+			return ret;
+		goto out_lock_and_map;
+	}
 
 	/* TODO: handle PTE-mapped THP */
 	if (folio_test_large(folio))
@@ -4983,18 +4993,21 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	if (migrate_misplaced_folio(folio, vma, target_nid)) {
 		nid = target_nid;
 		flags |= TNF_MIGRATED;
-	} else {
-		flags |= TNF_MIGRATE_FAIL;
-		vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
-					       vmf->address, &vmf->ptl);
-		if (unlikely(!vmf->pte))
-			goto out;
-		if (unlikely(!pte_same(ptep_get(vmf->pte), vmf->orig_pte))) {
-			pte_unmap_unlock(vmf->pte, vmf->ptl);
-			goto out;
-		}
-		goto out_map;
+		goto out;
 	}
+
+	flags |= TNF_MIGRATE_FAIL;
+
+out_lock_and_map:
+	vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
+				       vmf->address, &vmf->ptl);
+	if (unlikely(!vmf->pte))
+		goto out;
+	if (unlikely(!pte_same(ptep_get(vmf->pte), vmf->orig_pte))) {
+		pte_unmap_unlock(vmf->pte, vmf->ptl);
+		goto out;
+	}
+	goto out_map;
 
 out:
 	if (nid != NUMA_NO_NODE)
@@ -5151,7 +5164,7 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
 		return do_swap_page(vmf);
 
 	if (pte_protnone(vmf->orig_pte) && vma_is_accessible(vmf->vma))
-		return do_numa_page(vmf);
+		return handle_pte_protnone(vmf);
 
 	spin_lock(vmf->ptl);
 	entry = vmf->orig_pte;
@@ -5272,7 +5285,7 @@ retry_pud:
 		}
 		if (pmd_trans_huge(vmf.orig_pmd) || pmd_devmap(vmf.orig_pmd)) {
 			if (pmd_protnone(vmf.orig_pmd) && vma_is_accessible(vma))
-				return do_huge_pmd_numa_page(&vmf);
+				return handle_huge_pmd_protnone(&vmf);
 
 			if ((flags & (FAULT_FLAG_WRITE|FAULT_FLAG_UNSHARE)) &&
 			    !pmd_write(vmf.orig_pmd)) {
