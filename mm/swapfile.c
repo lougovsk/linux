@@ -1785,6 +1785,11 @@ static int unuse_pte(struct vm_area_struct *vma, pmd_t *pmd,
 		goto setpte;
 	}
 
+	if (arch_swap_prepare_to_restore(entry, folio)) {
+		ret = -EINVAL;
+		goto out;
+	}
+
 	/*
 	 * Some architectures may have to restore extra metadata to the page
 	 * when reading from swap. This metadata may be indexed by swap entry
