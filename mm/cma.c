@@ -147,8 +147,12 @@ static int __init cma_init_reserved_areas(void)
 {
 	int i;
 
-	for (i = 0; i < cma_area_count; i++)
+	for (i = 0; i < cma_area_count; i++) {
+		/* Region was removed. */
+		if (!cma_areas[i].count)
+			continue;
 		cma_activate_area(&cma_areas[i]);
+	}
 
 	return 0;
 }
@@ -214,6 +218,30 @@ int __init cma_init_reserved_mem(phys_addr_t base, phys_addr_t size,
 	totalcma_pages += (size / PAGE_SIZE);
 
 	return 0;
+}
+
+/**
+ * cma_remove_mem() - remove cma area
+ * @res_cma: Pointer to the cma region.
+ *
+ * This function removes a cma region created with cma_init_reserved_mem(). The
+ * ->count is set to 0.
+ */
+void __init cma_remove_mem(struct cma **res_cma)
+{
+	struct cma *cma;
+
+	if (WARN_ON_ONCE(!res_cma || !(*res_cma)))
+		return;
+
+	cma = *res_cma;
+	if (WARN_ON_ONCE(!cma->count))
+		return;
+
+	totalcma_pages -= cma->count;
+	cma->count = 0;
+
+	*res_cma = NULL;
 }
 
 /**
