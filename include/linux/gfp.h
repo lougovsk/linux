@@ -172,7 +172,7 @@ static inline struct zonelist *node_zonelist(int nid, gfp_t flags)
 static inline void arch_free_page(struct page *page, int order) { }
 #endif
 #ifndef HAVE_ARCH_ALLOC_PAGE
-static inline void arch_alloc_page(struct page *page, int order) { }
+static inline void arch_alloc_page(struct page *page, int order, gfp_t gfp_flags) { }
 #endif
 
 struct page *__alloc_pages(gfp_t gfp, unsigned int order, int preferred_nid,

@@ -1485,7 +1485,7 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 	set_page_private(page, 0);
 	set_page_refcounted(page);
 
-	arch_alloc_page(page, order);
+	arch_alloc_page(page, order, gfp_flags);
 	debug_pagealloc_map_pages(page, 1 << order);
 
 	/*

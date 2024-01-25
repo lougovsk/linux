@@ -163,7 +163,7 @@ static inline int page_reset_referenced(unsigned long addr)
 
 struct page;
 void arch_free_page(struct page *page, int order);
-void arch_alloc_page(struct page *page, int order);
+void arch_alloc_page(struct page *page, int order, gfp_t gfp_flags);
 
 static inline int devmem_is_allowed(unsigned long pfn)
 {

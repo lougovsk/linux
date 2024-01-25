@@ -21,7 +21,7 @@ void arch_free_page(struct page *page, int order)
 	__set_page_unused(page_to_virt(page), 1UL << order);
 }
 
-void arch_alloc_page(struct page *page, int order)
+void arch_alloc_page(struct page *page, int order, gfp_t gfp_flags)
 {
 	if (!cmma_flag)
 		return;
