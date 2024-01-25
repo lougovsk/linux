@@ -944,7 +944,7 @@ NOKPROBE_SYMBOL(do_debug_exception);
 gfp_t arch_calc_vma_gfp(struct vm_area_struct *vma, gfp_t gfp)
 {
 	if (vma->vm_flags & VM_MTE)
-		return __GFP_ZEROTAGS;
+		return __GFP_TAGGED;
 	return 0;
 }
 
