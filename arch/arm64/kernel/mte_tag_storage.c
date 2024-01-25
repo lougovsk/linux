@@ -363,6 +363,8 @@ static int __init mte_enable_tag_storage(void)
 			goto out_disabled;
 	}
 
+	reserve_tag_storage(ZERO_PAGE(0), 0, GFP_HIGHUSER);
+
 	static_branch_enable(&tag_storage_enabled_key);
 	pr_info("MTE tag storage region management enabled");
 
