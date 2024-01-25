@@ -36,6 +36,14 @@ bool page_is_tag_storage(struct page *page);
 
 vm_fault_t handle_folio_missing_tag_storage(struct folio *folio, struct vm_fault *vmf,
 					    bool *map_pte);
+vm_fault_t mte_try_transfer_swap_tags(swp_entry_t entry, struct page *page);
+
+void tags_by_pfn_lock(void);
+void tags_by_pfn_unlock(void);
+
+void *mte_erase_tags_for_pfn(unsigned long pfn);
+bool mte_save_tags_for_pfn(void *tags, unsigned long pfn);
+void mte_restore_tags_for_pfn(unsigned long start_pfn, int order);
 #else
 static inline bool tag_storage_enabled(void)
 {
