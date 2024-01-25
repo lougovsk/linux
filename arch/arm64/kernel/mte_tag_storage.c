@@ -19,6 +19,8 @@
 
 #include <asm/mte_tag_storage.h>
 
+__ro_after_init DEFINE_STATIC_KEY_FALSE(tag_storage_enabled_key);
+
 struct tag_region {
 	struct range mem_range;	/* Memory associated with the tag storage, in PFNs. */
 	struct range tag_range;	/* Tag storage memory, in PFNs. */
@@ -314,3 +316,51 @@ out_disabled:
 	num_tag_regions = 0;
 	pr_info("MTE tag storage region management disabled");
 }
+
+static int __init mte_enable_tag_storage(void)
+{
+	struct range *tag_range;
+	struct cma *cma;
+	int i, ret;
+
+	if (num_tag_regions == 0)
+		return 0;
+
+	for (i = 0; i < num_tag_regions; i++) {
+		tag_range = &tag_regions[i].tag_range;
+		cma = tag_regions[i].cma;
+		/*
+		 * CMA will keep the pages as reserved when the region fails
+		 * activation.
+		 */
+		if (PageReserved(pfn_to_page(tag_range->start)))
+			goto out_disabled;
+	}
+
+	static_branch_enable(&tag_storage_enabled_key);
+	pr_info("MTE tag storage region management enabled");
+
+	return 0;
+
+out_disabled:
+	for (i = 0; i < num_tag_regions; i++) {
+		tag_range = &tag_regions[i].tag_range;
+		cma = tag_regions[i].cma;
+
+		if (PageReserved(pfn_to_page(tag_range->start)))
+			continue;
+
+		/* Try really hard to reserve the tag storage. */
+		ret = cma_alloc(cma, range_len(tag_range), 8, true);
+		/*
+		 * Tag storage is still in use for data, memory and/or tag
+		 * corruption will ensue.
+		 */
+		WARN_ON_ONCE(ret);
+	}
+	num_tag_regions = 0;
+	pr_info("MTE tag storage region management disabled");
+
+	return -EINVAL;
+}
+arch_initcall(mte_enable_tag_storage);
