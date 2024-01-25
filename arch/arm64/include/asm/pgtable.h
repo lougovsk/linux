@@ -1108,7 +1108,12 @@ static inline void arch_swap_restore(swp_entry_t entry, struct folio *folio)
 #define __HAVE_ARCH_FREE_PAGES_PREPARE
 static inline void arch_free_pages_prepare(struct page *page, int order)
 {
-	if (tag_storage_enabled() && page_mte_tagged(page))
+	/*
+	 * KVM can free a page after tag storage has been reserved and before is
+	 * marked as tagged, hence use page_tag_storage_reserved() instead of
+	 * page_mte_tagged() to check for tag storage.
+	 */
+	if (tag_storage_enabled() && page_tag_storage_reserved(page))
 		free_tag_storage(page, order);
 }
 

@@ -34,6 +34,8 @@ void free_tag_storage(struct page *page, int order);
 bool page_tag_storage_reserved(struct page *page);
 bool page_is_tag_storage(struct page *page);
 
+int replace_folio_with_tagged(struct folio *folio);
+
 vm_fault_t handle_folio_missing_tag_storage(struct folio *folio, struct vm_fault *vmf,
 					    bool *map_pte);
 vm_fault_t mte_try_transfer_swap_tags(swp_entry_t entry, struct page *page);
@@ -66,6 +68,14 @@ static inline void free_tag_storage(struct page *page, int order)
 static inline bool page_tag_storage_reserved(struct page *page)
 {
 	return true;
+}
+static inline bool page_is_tag_storage(struct page *page)
+{
+	return false;
+}
+static inline int replace_folio_with_tagged(struct folio *folio)
+{
+	return -EINVAL;
 }
 #endif /* CONFIG_ARM64_MTE_TAG_STORAGE */
 

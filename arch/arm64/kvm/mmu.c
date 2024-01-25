@@ -1361,6 +1361,8 @@ static void sanitise_mte_tags(struct kvm *kvm, kvm_pfn_t pfn,
 	if (!kvm_has_mte(kvm))
 		return;
 
+	WARN_ON_ONCE(tag_storage_enabled() && !page_tag_storage_reserved(pfn_to_page(pfn)));
+
 	for (i = 0; i < nr_pages; i++, page++) {
 		if (try_page_mte_tagging(page)) {
 			mte_clear_page_tags(page_address(page));
@@ -1372,6 +1374,39 @@ static void sanitise_mte_tags(struct kvm *kvm, kvm_pfn_t pfn,
 static bool kvm_vma_mte_allowed(struct vm_area_struct *vma)
 {
 	return vma->vm_flags & VM_MTE_ALLOWED;
+}
+
+/*
+ * Called with an elevated reference on the pfn. If successful, the reference
+ * count is not changed. If it returns an error, the elevated reference is
+ * dropped.
+ */
+static int kvm_mte_reserve_tag_storage(kvm_pfn_t pfn)
+{
+	struct folio *folio;
+	int ret;
+
+	folio = page_folio(pfn_to_page(pfn));
+
+	if (page_tag_storage_reserved(folio_page(folio, 0)))
+		 return 0;
+
+	if (page_is_tag_storage(folio_page(folio, 0)))
+		goto migrate;
+
+	ret = reserve_tag_storage(folio_page(folio, 0), folio_order(folio),
+				  GFP_HIGHUSER_MOVABLE);
+	if (!ret)
+		return 0;
+
+migrate:
+	replace_folio_with_tagged(folio);
+	/*
+	 * If migration succeeds, the fault needs to be replayed because 'pfn'
+	 * has been unmapped. If migration fails, KVM will try to reserve tag
+	 * storage again by replaying the fault.
+	 */
+	return -EAGAIN;
 }
 
 static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
@@ -1488,6 +1523,7 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 
 	pfn = __gfn_to_pfn_memslot(memslot, gfn, false, false, NULL,
 				   write_fault, &writable, NULL);
+
 	if (pfn == KVM_PFN_ERR_HWPOISON) {
 		kvm_send_hwpoison_signal(hva, vma_shift);
 		return 0;
@@ -1517,6 +1553,13 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 
 	if (exec_fault && device)
 		return -ENOEXEC;
+
+	if (tag_storage_enabled() && !fault_is_perm && !device &&
+	    kvm_has_mte(kvm) && mte_allowed) {
+		ret = kvm_mte_reserve_tag_storage(pfn);
+		if (ret)
+			return ret == -EAGAIN ? 0 : ret;
+	}
 
 	read_lock(&kvm->mmu_lock);
 	pgt = vcpu->arch.hw_mmu->pgt;

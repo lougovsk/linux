@@ -974,7 +974,7 @@ void tag_clear_highpage(struct page *page)
  * Called with an elevated reference on the folio.
  * Returns with the elevated reference dropped.
  */
-static int replace_folio_with_tagged(struct folio *folio)
+int replace_folio_with_tagged(struct folio *folio)
 {
 	struct migration_target_control mtc = {
 		.nid = NUMA_NO_NODE,
