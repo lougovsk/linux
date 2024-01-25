@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/reserved-memory/arm,mte-tag-storage.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Tag storage memory for Memory Tagging Extension
+
+description: |
+  Description of the tag storage memory region that Linux can use to store
+  data when the associated memory is not tagged.
+
+  The reserved memory described by the node must also be described by a
+  standalone 'memory' node.
+
+maintainers:
+  - Alexandru Elisei <alexandru.elisei@arm.com>
+
+allOf:
+  - $ref: reserved-memory.yaml
+
+properties:
+  compatible:
+    const: arm,mte-tag-storage
+
+  reg:
+    description: |
+      Specifies the memory region that MTE uses for tag storage. The size of the
+      region must be equal to the size needed to store all the tags for the
+      associated tagged memory.
+
+  block-size:
+    description: |
+      Specifies the minimum multiple of 4K bytes of tag storage where all the
+      tags stored in the block correspond to a contiguous memory region. This
+      is needed for platforms where the memory controller interleaves tag
+      writes to memory.
+
+      For example, if the memory controller interleaves tag writes for 256KB
+      of contiguous memory across 8K of tag storage (2-way interleave), then
+      the correct value for 'block-size' is 0x2000.
+
+      This value is a hardware property, independent of the selected kernel page
+      size.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  tagged-memory:
+    description: |
+      Specifies the memory node, as a phandle, for which all the tags are
+      stored in the tag storage region.
+
+      The memory node must describe one contiguous memory region (i.e, the
+      'ranges' property of the memory node must have exactly one entry).
+    $ref: /schemas/types.yaml#/definitions/phandle
+
+unevaluatedProperties: false
+
+required:
+  - compatible
+  - reg
+  - block-size
+  - tagged-memory
+  - reusable
+
+examples:
+  - |
+    reserved-memory {
+      #address-cells = <2>;
+      #size-cells = <2>;
+
+      tags0: tag-storage@8f8000000 {
+        compatible = "arm,mte-tag-storage";
+        reg = <0x08 0xf8000000 0x00 0x4000000>;
+        block-size = <0x1000>;
+        tagged-memory = <&memory0>;
+        reusable;
+      };
+    };

@@ -39,6 +39,7 @@
 #include <asm/kernel-pgtable.h>
 #include <asm/kvm_host.h>
 #include <asm/memory.h>
+#include <asm/mte_tag_storage.h>
 #include <asm/numa.h>
 #include <asm/sections.h>
 #include <asm/setup.h>
@@ -385,6 +386,8 @@ void __init mem_init(void)
 
 	/* this will put all unused low memory onto the freelists */
 	memblock_free_all();
+
+	mte_init_tag_storage();
 
 	/*
 	 * Check boundaries twice: Some fundamental inconsistencies can be
