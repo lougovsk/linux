@@ -3817,7 +3817,7 @@ static int its_vpe_set_affinity(struct irq_data *d,
 				bool force)
 {
 	struct its_vpe *vpe = irq_data_get_irq_chip_data(d);
-	int from, cpu = cpumask_first(mask_val);
+	int cur, from, cpu = cpumask_first(mask_val);
 	unsigned long flags;
 
 	/*
@@ -3839,11 +3839,13 @@ static int its_vpe_set_affinity(struct irq_data *d,
 
 	vpe->col_idx = cpu;
 
+	cur = cpumask_first(irq_data_get_effective_affinity_mask(d));
 	/*
 	 * GICv4.1 allows us to skip VMOVP if moving to a cpu whose RD
 	 * is sharing its VPE table with the current one.
 	 */
 	if (gic_data_rdist_cpu(cpu)->vpe_table_mask &&
+	    cpumask_test_cpu(cur, mask_val) &&
 	    cpumask_test_cpu(from, gic_data_rdist_cpu(cpu)->vpe_table_mask))
 		goto out;
 
