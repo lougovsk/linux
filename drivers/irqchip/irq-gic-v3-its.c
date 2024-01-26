@@ -3850,8 +3850,9 @@ static int its_vpe_set_affinity(struct irq_data *d,
 	its_send_vmovp(vpe);
 	its_vpe_db_proxy_move(vpe, from, cpu);
 
-out:
 	irq_data_update_effective_affinity(d, cpumask_of(cpu));
+
+out:
 	vpe_to_cpuid_unlock(vpe, flags);
 
 	return IRQ_SET_MASK_OK_DONE;
