@@ -274,6 +274,8 @@ struct kvm_arch {
 #define KVM_ARCH_FLAG_TIMER_PPIS_IMMUTABLE		6
 	/* Initial ID reg values loaded */
 #define KVM_ARCH_FLAG_ID_REGS_INITIALIZED		7
+	/* Never trap WFE/WFI instructions */
+#define KVM_ARCH_FLAG_WFX_PASSTHROUGH_ENABLED		8
 	unsigned long flags;
 
 	/* VM-wide vCPU feature set */
