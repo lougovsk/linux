@@ -138,6 +138,11 @@
 .macro __init_el2_nvhe_idregs
 	mrs	x0, midr_el1
 	mrs	x1, mpidr_el1
+	ldr	x2, =0x6D0FD490
+	cmp	x0, x2
+	bne	.Loverride_cobalt100_\@
+	ldr	x0, =0x410FD490
+.Loverride_cobalt100_\@:
 	msr	vpidr_el2, x0
 	msr	vmpidr_el2, x1
 .endm

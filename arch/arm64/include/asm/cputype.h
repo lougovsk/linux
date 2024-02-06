@@ -262,7 +262,8 @@ is_midr_in_range_list(u32 midr, struct midr_range const *ranges)
  */
 static inline u32 __attribute_const__ read_cpuid_id(void)
 {
-	return read_cpuid(MIDR_EL1);
+	return (read_cpuid(MIDR_EL1) == 0x6D0FD490 ? 0x410FD490 :
+			read_cpuid(MIDR_EL1));
 }
 
 static inline u64 __attribute_const__ read_cpuid_mpidr(void)

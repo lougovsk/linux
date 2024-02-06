@@ -3574,7 +3574,14 @@ id_to_sys_reg_desc(struct kvm_vcpu *vcpu, u64 id,
 		return ((struct sys_reg_desc *)r)->val;			\
 	}
 
-FUNCTION_INVARIANT(midr_el1)
+static u64 get_midr_el1(struct kvm_vcpu *v, const struct sys_reg_desc *r)
+{
+	((struct sys_reg_desc *)r)->val = read_sysreg(midr_el1);
+	if (((struct sys_reg_desc *)r)->val == 0x6D0FD490)
+		((struct sys_reg_desc *)r)->val == 0x410FD490;
+	return ((struct sys_reg_desc *)r)->val;
+}
+
 FUNCTION_INVARIANT(revidr_el1)
 FUNCTION_INVARIANT(aidr_el1)
 
