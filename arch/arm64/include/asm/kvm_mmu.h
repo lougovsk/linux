@@ -127,14 +127,24 @@ void kvm_apply_hyp_relocations(void);
 
 #define __hyp_pa(x) (((phys_addr_t)(x)) + hyp_physvirt_offset)
 
+/*
+ * Convert a kernel VA into a HYP VA.
+ *
+ * Can be called from hyp or non-hyp context.
+ */
 static __always_inline unsigned long __kern_hyp_va(unsigned long v)
 {
+/*
+ * This #ifndef is an optimisation for when this is called from VHE hyp
+ * context.  When called from a VHE non-hyp context, kvm_update_va_mask() will
+ * replace the instructions with `nop`s.
+ */
 #ifndef __KVM_VHE_HYPERVISOR__
-	asm volatile(ALTERNATIVE_CB("and %0, %0, #1\n"
-				    "ror %0, %0, #1\n"
-				    "add %0, %0, #0\n"
-				    "add %0, %0, #0, lsl 12\n"
-				    "ror %0, %0, #63\n",
+	asm volatile(ALTERNATIVE_CB("and %0, %0, #1\n"         /* mask with va_mask */
+				    "ror %0, %0, #1\n"         /* rotate to the first tag bit */
+				    "add %0, %0, #0\n"         /* insert the low 12 bits of the tag */
+				    "add %0, %0, #0, lsl 12\n" /* insert the top 12 bits of the tag */
+				    "ror %0, %0, #63\n",       /* rotate back */
 				    ARM64_ALWAYS_SYSTEM,
 				    kvm_update_va_mask)
 		     : "+r" (v));
