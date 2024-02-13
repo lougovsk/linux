@@ -12,6 +12,7 @@
 #include "vgic.h"
 #include "gic.h"
 #include "gic_v3.h"
+#include "processor.h"
 
 /*
  * vGIC-v3 default host setup
@@ -165,4 +166,244 @@ void kvm_irq_write_ispendr(int gic_fd, uint32_t intid, struct kvm_vcpu *vcpu)
 void kvm_irq_write_isactiver(int gic_fd, uint32_t intid, struct kvm_vcpu *vcpu)
 {
 	vgic_poke_irq(gic_fd, intid, vcpu, GICD_ISACTIVER);
+}
+
+static u64 vgic_its_read_reg(int its_fd, unsigned long offset)
+{
+	u64 attr;
+
+	kvm_device_attr_get(its_fd, KVM_DEV_ARM_VGIC_GRP_ITS_REGS,
+			    offset, &attr);
+	return attr;
+}
+
+static void vgic_its_write_reg(int its_fd, unsigned long offset, u64 val)
+{
+	kvm_device_attr_set(its_fd, KVM_DEV_ARM_VGIC_GRP_ITS_REGS,
+			    offset, &val);
+}
+
+static unsigned long vgic_its_find_baser(int its_fd, unsigned int type)
+{
+	int i;
+
+	for (i = 0; i < GITS_BASER_NR_REGS; i++) {
+		u64 baser;
+		unsigned long offset = GITS_BASER + (i * sizeof(baser));
+
+		baser = vgic_its_read_reg(its_fd, offset);
+		if (GITS_BASER_TYPE(baser) == type)
+			return offset;
+	}
+
+	TEST_FAIL("Couldn't find an ITS BASER of type %u", type);
+	return -1;
+}
+
+static void vgic_its_install_table(int its_fd, unsigned int type, vm_paddr_t base,
+				   size_t size)
+{
+	unsigned long offset = vgic_its_find_baser(its_fd, type);
+	u64 baser;
+
+	baser = ((size / SZ_64K) - 1) |
+		GITS_BASER_PAGE_SIZE_64K |
+		GITS_BASER_InnerShareable |
+		base |
+		GITS_BASER_RaWaWb |
+		GITS_BASER_VALID;
+
+	vgic_its_write_reg(its_fd, offset, baser);
+}
+
+static void vgic_its_install_cmdq(int its_fd, vm_paddr_t base, size_t size)
+{
+	u64 cbaser;
+
+	cbaser = ((size / SZ_4K) - 1) |
+		 GITS_CBASER_InnerShareable |
+		 base |
+		 GITS_CBASER_RaWaWb |
+		 GITS_CBASER_VALID;
+
+	vgic_its_write_reg(its_fd, GITS_CBASER, cbaser);
+}
+
+struct vgic_its *vgic_its_setup(struct kvm_vm *vm,
+				vm_paddr_t coll_tbl, size_t coll_tbl_sz,
+				vm_paddr_t device_tbl, size_t device_tbl_sz,
+				vm_paddr_t cmdq, size_t cmdq_size)
+{
+	int its_fd = kvm_create_device(vm, KVM_DEV_TYPE_ARM_VGIC_ITS);
+	struct vgic_its *its = malloc(sizeof(struct vgic_its));
+	u64 attr, ctlr;
+
+	attr = GITS_BASE_GPA;
+	kvm_device_attr_set(its_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
+			    KVM_VGIC_ITS_ADDR_TYPE, &attr);
+
+	kvm_device_attr_set(its_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
+			    KVM_DEV_ARM_VGIC_CTRL_INIT, NULL);
+
+	vgic_its_install_table(its_fd, GITS_BASER_TYPE_COLLECTION, coll_tbl,
+			       coll_tbl_sz);
+	vgic_its_install_table(its_fd, GITS_BASER_TYPE_DEVICE, device_tbl,
+			       device_tbl_sz);
+
+	vgic_its_install_cmdq(its_fd, cmdq, cmdq_size);
+
+	ctlr = vgic_its_read_reg(its_fd, GITS_CTLR);
+	ctlr |= GITS_CTLR_ENABLE;
+	vgic_its_write_reg(its_fd, GITS_CTLR, ctlr);
+
+	*its = (struct vgic_its) {
+		.its_fd		= its_fd,
+		.cmdq_hva	= addr_gpa2hva(vm, cmdq),
+		.cmdq_size	= cmdq_size,
+	};
+
+	return its;
+}
+
+void vgic_its_destroy(struct vgic_its *its)
+{
+	close(its->its_fd);
+	free(its);
+}
+
+struct its_cmd_block {
+	union {
+		u64	raw_cmd[4];
+		__le64	raw_cmd_le[4];
+	};
+};
+
+static inline void its_fixup_cmd(struct its_cmd_block *cmd)
+{
+	/* Let's fixup BE commands */
+	cmd->raw_cmd_le[0] = cpu_to_le64(cmd->raw_cmd[0]);
+	cmd->raw_cmd_le[1] = cpu_to_le64(cmd->raw_cmd[1]);
+	cmd->raw_cmd_le[2] = cpu_to_le64(cmd->raw_cmd[2]);
+	cmd->raw_cmd_le[3] = cpu_to_le64(cmd->raw_cmd[3]);
+}
+
+static void its_mask_encode(u64 *raw_cmd, u64 val, int h, int l)
+{
+	u64 mask = GENMASK_ULL(h, l);
+	*raw_cmd &= ~mask;
+	*raw_cmd |= (val << l) & mask;
+}
+
+static void its_encode_cmd(struct its_cmd_block *cmd, u8 cmd_nr)
+{
+	its_mask_encode(&cmd->raw_cmd[0], cmd_nr, 7, 0);
+}
+
+static void its_encode_devid(struct its_cmd_block *cmd, u32 devid)
+{
+	its_mask_encode(&cmd->raw_cmd[0], devid, 63, 32);
+}
+
+static void its_encode_event_id(struct its_cmd_block *cmd, u32 id)
+{
+	its_mask_encode(&cmd->raw_cmd[1], id, 31, 0);
+}
+
+static void its_encode_phys_id(struct its_cmd_block *cmd, u32 phys_id)
+{
+	its_mask_encode(&cmd->raw_cmd[1], phys_id, 63, 32);
+}
+
+static void its_encode_size(struct its_cmd_block *cmd, u8 size)
+{
+	its_mask_encode(&cmd->raw_cmd[1], size, 4, 0);
+}
+
+static void its_encode_itt(struct its_cmd_block *cmd, u64 itt_addr)
+{
+	its_mask_encode(&cmd->raw_cmd[2], itt_addr >> 8, 51, 8);
+}
+
+static void its_encode_valid(struct its_cmd_block *cmd, int valid)
+{
+	its_mask_encode(&cmd->raw_cmd[2], !!valid, 63, 63);
+}
+
+static void its_encode_target(struct its_cmd_block *cmd, u64 target_addr)
+{
+	its_mask_encode(&cmd->raw_cmd[2], target_addr >> 16, 51, 16);
+}
+
+static void its_encode_collection(struct its_cmd_block *cmd, u16 col)
+{
+	its_mask_encode(&cmd->raw_cmd[2], col, 15, 0);
+}
+
+static void vgic_its_send_cmd(struct vgic_its *its, struct its_cmd_block *cmd)
+{
+	u64 cwriter = vgic_its_read_reg(its->its_fd, GITS_CWRITER);
+	struct its_cmd_block *dst = its->cmdq_hva + cwriter;
+	u64 next;
+
+	its_fixup_cmd(cmd);
+
+	WRITE_ONCE(*dst, *cmd);
+	dsb(ishst);
+
+	next = (cwriter + sizeof(*cmd)) % its->cmdq_size;
+	vgic_its_write_reg(its->its_fd, GITS_CWRITER, next);
+
+	TEST_ASSERT(vgic_its_read_reg(its->its_fd, GITS_CREADR) == next,
+		    "ITS didn't process command at offset: %lu\n", cwriter);
+}
+
+void vgic_its_send_mapd_cmd(struct vgic_its *its, u32 device_id,
+		            vm_paddr_t itt_base, size_t itt_size, bool valid)
+{
+	struct its_cmd_block cmd = {};
+
+	its_encode_cmd(&cmd, GITS_CMD_MAPD);
+	its_encode_devid(&cmd, device_id);
+	its_encode_size(&cmd, ilog2(itt_size) - 1);
+	its_encode_itt(&cmd, itt_base);
+	its_encode_valid(&cmd, valid);
+
+	vgic_its_send_cmd(its, &cmd);
+}
+
+void vgic_its_send_mapc_cmd(struct vgic_its *its, struct kvm_vcpu *vcpu,
+			    u32 collection_id, bool valid)
+{
+	struct its_cmd_block cmd = {};
+
+	its_encode_cmd(&cmd, GITS_CMD_MAPC);
+	its_encode_collection(&cmd, collection_id);
+	its_encode_target(&cmd, vcpu->id);
+	its_encode_valid(&cmd, valid);
+
+	vgic_its_send_cmd(its, &cmd);
+}
+
+void vgic_its_send_mapti_cmd(struct vgic_its *its, u32 device_id,
+			     u32 event_id, u32 collection_id, u32 intid)
+{
+	struct its_cmd_block cmd = {};
+
+	its_encode_cmd(&cmd, GITS_CMD_MAPTI);
+	its_encode_devid(&cmd, device_id);
+	its_encode_event_id(&cmd, event_id);
+	its_encode_phys_id(&cmd, intid);
+	its_encode_collection(&cmd, collection_id);
+
+	vgic_its_send_cmd(its, &cmd);
+}
+
+void vgic_its_send_invall_cmd(struct vgic_its *its, u32 collection_id)
+{
+	struct its_cmd_block cmd = {};
+
+	its_encode_cmd(&cmd, GITS_CMD_INVALL);
+	its_encode_collection(&cmd, collection_id);
+
+	vgic_its_send_cmd(its, &cmd);
 }

@@ -32,4 +32,24 @@ void kvm_irq_write_isactiver(int gic_fd, uint32_t intid, struct kvm_vcpu *vcpu);
 
 #define KVM_IRQCHIP_NUM_PINS	(1020 - 32)
 
+struct vgic_its {
+	int	its_fd;
+	void 	*cmdq_hva;
+	size_t	cmdq_size;
+};
+
+struct vgic_its *vgic_its_setup(struct kvm_vm *vm,
+				vm_paddr_t coll_tbl, size_t coll_tbl_sz,
+				vm_paddr_t device_tbl, size_t device_tbl_sz,
+				vm_paddr_t cmdq, size_t cmdq_size);
+void vgic_its_destroy(struct vgic_its *its);
+
+void vgic_its_send_mapd_cmd(struct vgic_its *its, u32 device_id,
+		            vm_paddr_t itt_base, size_t itt_size, bool valid);
+void vgic_its_send_mapc_cmd(struct vgic_its *its, struct kvm_vcpu *vcpu,
+			    u32 collection_id, bool valid);
+void vgic_its_send_mapti_cmd(struct vgic_its *its, u32 device_id,
+			     u32 event_id, u32 collection_id, u32 intid);
+void vgic_its_send_invall_cmd(struct vgic_its *its, u32 collection_id);
+
 #endif // SELFTEST_KVM_VGIC_H

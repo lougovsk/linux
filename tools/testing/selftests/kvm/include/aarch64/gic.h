@@ -11,7 +11,12 @@ enum gic_type {
 	GIC_TYPE_MAX,
 };
 
-#define GICD_BASE_GPA		0x8000000ULL
+/*
+ * Note that the redistributor frames are at the end, as the range scales
+ * with the number of vCPUs in the VM.
+ */
+#define GITS_BASE_GPA		0x8000000ULL
+#define GICD_BASE_GPA		(GITS_BASE_GPA + SZ_128K)
 #define GICR_BASE_GPA		(GICD_BASE_GPA + SZ_64K)
 
 /* The GIC is identity-mapped into the guest at the time of setup. */
