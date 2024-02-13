@@ -830,6 +830,8 @@ vm_paddr_t vm_phy_page_alloc(struct kvm_vm *vm, vm_paddr_t paddr_min,
 vm_paddr_t vm_phy_pages_alloc(struct kvm_vm *vm, size_t num,
 			      vm_paddr_t paddr_min, uint32_t memslot);
 vm_paddr_t vm_alloc_page_table(struct kvm_vm *vm);
+vm_paddr_t vm_phy_pages_alloc_aligned(struct kvm_vm *vm, size_t num,
+				      vm_paddr_t paddr_min, uint32_t memslot);
 
 /*
  * ____vm_create() does KVM_CREATE_VM and little else.  __vm_create() also

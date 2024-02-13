@@ -1984,8 +1984,9 @@ const char *exit_reason_str(unsigned int exit_reason)
  * and their base address is returned. A TEST_ASSERT failure occurs if
  * not enough pages are available at or above paddr_min.
  */
-vm_paddr_t vm_phy_pages_alloc(struct kvm_vm *vm, size_t num,
-			      vm_paddr_t paddr_min, uint32_t memslot)
+static vm_paddr_t __vm_phy_pages_alloc(struct kvm_vm *vm, size_t num,
+				       vm_paddr_t paddr_min, uint32_t memslot,
+				       bool aligned)
 {
 	struct userspace_mem_region *region;
 	sparsebit_idx_t pg, base;
@@ -1997,14 +1998,20 @@ vm_paddr_t vm_phy_pages_alloc(struct kvm_vm *vm, size_t num,
 		"  paddr_min: 0x%lx page_size: 0x%x",
 		paddr_min, vm->page_size);
 
+	TEST_ASSERT(!aligned || (paddr_min % vm->page_size * num) == 0,
+		    "Min physical address isn't naturally aligned.\n"
+		    "  paddr_min: 0x%lx page_size: 0x%x num: %lu",
+		    paddr_min, vm->page_size, num);
+
 	region = memslot2region(vm, memslot);
 	base = pg = paddr_min >> vm->page_shift;
 
 	do {
 		for (; pg < base + num; ++pg) {
 			if (!sparsebit_is_set(region->unused_phy_pages, pg)) {
-				base = pg = sparsebit_next_set(region->unused_phy_pages, pg);
-				break;
+				do {
+					base = pg = sparsebit_next_set(region->unused_phy_pages, pg);
+				} while (aligned && ((pg % num) != 0));
 			}
 		}
 	} while (pg && pg != base + num);
@@ -2024,6 +2031,12 @@ vm_paddr_t vm_phy_pages_alloc(struct kvm_vm *vm, size_t num,
 	return base * vm->page_size;
 }
 
+vm_paddr_t vm_phy_pages_alloc(struct kvm_vm *vm, size_t num,
+			      vm_paddr_t paddr_min, uint32_t memslot)
+{
+	return __vm_phy_pages_alloc(vm, num, paddr_min, memslot, false);
+}
+
 vm_paddr_t vm_phy_page_alloc(struct kvm_vm *vm, vm_paddr_t paddr_min,
 			     uint32_t memslot)
 {
@@ -2034,6 +2047,12 @@ vm_paddr_t vm_alloc_page_table(struct kvm_vm *vm)
 {
 	return vm_phy_page_alloc(vm, KVM_GUEST_PAGE_TABLE_MIN_PADDR,
 				 vm->memslots[MEM_REGION_PT]);
+}
+
+vm_paddr_t vm_phy_pages_alloc_aligned(struct kvm_vm *vm, size_t num,
+				      vm_paddr_t paddr_min, uint32_t memslot)
+{
+	return __vm_phy_pages_alloc(vm, num, paddr_min, memslot, true);
 }
 
 /*
