@@ -32,6 +32,10 @@ void kvm_irq_write_isactiver(int gic_fd, uint32_t intid, struct kvm_vcpu *vcpu);
 
 #define KVM_IRQCHIP_NUM_PINS	(1020 - 32)
 
+void vgic_rdist_enable_lpis(int gic_fd, struct kvm_vcpu *vcpu,
+			    vm_paddr_t cfg_table, size_t cfg_table_size,
+			    vm_paddr_t pend_table);
+
 struct vgic_its {
 	int	its_fd;
 	void 	*cmdq_hva;

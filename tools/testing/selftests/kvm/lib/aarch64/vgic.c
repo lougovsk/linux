@@ -3,8 +3,10 @@
  * ARM Generic Interrupt Controller (GIC) v3 host support
  */
 
+#include <linux/kernel.h>
 #include <linux/kvm.h>
 #include <linux/sizes.h>
+#include <asm/cputype.h>
 #include <asm/kvm_para.h>
 #include <asm/kvm.h>
 
@@ -166,6 +168,82 @@ void kvm_irq_write_ispendr(int gic_fd, uint32_t intid, struct kvm_vcpu *vcpu)
 void kvm_irq_write_isactiver(int gic_fd, uint32_t intid, struct kvm_vcpu *vcpu)
 {
 	vgic_poke_irq(gic_fd, intid, vcpu, GICD_ISACTIVER);
+}
+
+#define VGIC_AFFINITY_0_SHIFT 0
+#define VGIC_AFFINITY_1_SHIFT 8
+#define VGIC_AFFINITY_2_SHIFT 16
+#define VGIC_AFFINITY_3_SHIFT 24
+
+#define MPIDR_TO_VGIC_LEVEL(mpidr, level) \
+	((((mpidr) >> MPIDR_LEVEL_SHIFT(level)) & MPIDR_LEVEL_MASK) << \
+	 VGIC_AFFINITY_## level ##_SHIFT)
+
+#define MPIDR_TO_VGIC(mpidr) \
+	((MPIDR_TO_VGIC_LEVEL(mpidr, 0) | \
+	 MPIDR_TO_VGIC_LEVEL(mpidr, 1) | \
+	 MPIDR_TO_VGIC_LEVEL(mpidr, 2) | \
+	 MPIDR_TO_VGIC_LEVEL(mpidr, 3)) << 32)
+
+static u32 vgic_rdist_read_reg(int gic_fd, struct kvm_vcpu *vcpu,
+			       unsigned long offset)
+{
+	u64 mpidr, attr;
+	u32 val;
+
+	vcpu_get_reg(vcpu, KVM_ARM64_SYS_REG(SYS_MPIDR_EL1), &mpidr);
+
+	attr = MPIDR_TO_VGIC(mpidr) | offset;
+	kvm_device_attr_get(gic_fd, KVM_DEV_ARM_VGIC_GRP_REDIST_REGS,
+			    attr, &val);
+
+	return val;
+}
+
+static void vgic_rdist_write_reg(int gic_fd, struct kvm_vcpu *vcpu,
+				 unsigned long offset, u32 val)
+{
+	u64 mpidr, attr;
+
+	vcpu_get_reg(vcpu, KVM_ARM64_SYS_REG(SYS_MPIDR_EL1), &mpidr);
+
+	attr = MPIDR_TO_VGIC(mpidr) | offset;
+	kvm_device_attr_set(gic_fd, KVM_DEV_ARM_VGIC_GRP_REDIST_REGS,
+			    attr, &val);
+}
+
+static void vgic_rdist_write_baser(int gic_fd, struct kvm_vcpu *vcpu,
+				   unsigned long offset, u64 val)
+{
+	u32 attr = val;
+
+	vgic_rdist_write_reg(gic_fd, vcpu, offset, attr);
+
+	attr = val >> 32;
+	vgic_rdist_write_reg(gic_fd, vcpu, offset + 4, attr);
+}
+
+void vgic_rdist_enable_lpis(int gic_fd, struct kvm_vcpu *vcpu,
+			    vm_paddr_t cfg_table, size_t cfg_table_size,
+			    vm_paddr_t pend_table)
+{
+	u32 ctlr;
+	u64 val;
+
+	val = (cfg_table |
+	       GICR_PROPBASER_InnerShareable |
+	       GICR_PROPBASER_RaWaWb |
+	       ((ilog2(cfg_table_size) - 1) & GICR_PROPBASER_IDBITS_MASK));
+	vgic_rdist_write_baser(gic_fd, vcpu, GICR_PROPBASER, val);
+
+	val = (pend_table |
+	       GICR_PENDBASER_InnerShareable |
+	       GICR_PENDBASER_RaWaWb);
+	vgic_rdist_write_baser(gic_fd, vcpu, GICR_PENDBASER, val);
+
+	ctlr = vgic_rdist_read_reg(gic_fd, vcpu, GICR_CTLR);
+	ctlr |= GICR_CTLR_ENABLE_LPIS;
+	vgic_rdist_write_reg(gic_fd, vcpu, GICR_CTLR, ctlr);
 }
 
 static u64 vgic_its_read_reg(int its_fd, unsigned long offset)
