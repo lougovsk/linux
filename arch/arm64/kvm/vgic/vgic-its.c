@@ -156,7 +156,7 @@ struct vgic_translation_cache_entry {
 	phys_addr_t		db;
 	u32			devid;
 	u32			eventid;
-	struct vgic_irq		*irq;
+	struct vgic_irq __rcu	*irq;
 	atomic64_t		usage_count;
 };
 
@@ -574,7 +574,7 @@ static struct vgic_irq *__vgic_its_check_cache(struct vgic_dist *dist,
 		 * If we hit a NULL entry, there is nothing after this
 		 * point.
 		 */
-		if (!cte->irq)
+		if (!rcu_access_pointer(cte->irq))
 			break;
 
 		if (cte->db != db || cte->devid != devid ||
@@ -582,7 +582,7 @@ static struct vgic_irq *__vgic_its_check_cache(struct vgic_dist *dist,
 			continue;
 
 		atomic64_inc(&cte->usage_count);
-		return cte->irq;
+		return rcu_dereference(cte->irq);
 	}
 
 	return NULL;
@@ -629,7 +629,7 @@ static struct vgic_translation_cache_entry *vgic_its_cache_victim(struct vgic_di
 		tmp = atomic64_read(&cte->usage_count);
 		max = max(max, tmp);
 
-		if (!cte->irq) {
+		if (!rcu_access_pointer(cte->irq)) {
 			victim = cte;
 			break;
 		}
@@ -663,6 +663,7 @@ static void vgic_its_cache_translation(struct kvm *kvm, struct vgic_its *its,
 		return;
 
 	raw_spin_lock_irqsave(&dist->lpi_list_lock, flags);
+	rcu_read_lock();
 
 	/*
 	 * We could have raced with another CPU caching the same
@@ -693,27 +694,32 @@ static void vgic_its_cache_translation(struct kvm *kvm, struct vgic_its *its,
 	new->db		= db;
 	new->devid	= devid;
 	new->eventid	= eventid;
-	new->irq	= irq;
+	rcu_assign_pointer(new->irq, irq);
 
 	/* Move the new translation to the head of the list */
 	list_add(&new->entry, &dist->lpi_translation_cache);
 	dist->lpi_cache_count++;
 
 out:
+	rcu_read_unlock();
 	raw_spin_unlock_irqrestore(&dist->lpi_list_lock, flags);
 
 	if (!victim)
 		return;
 
+	synchronize_rcu();
+
 	/*
 	 * Caching the translation implies having an extra reference
 	 * to the interrupt, so drop the potential reference on what
-	 * was in the cache, and increment it on the new interrupt.
+	 * was in the cache.
 	 */
 	if (victim->irq) {
+		struct vgic_irq *irq = rcu_dereference_raw(victim->irq);
+
 		KVM_VM_TRACE_EVENT(kvm, vgic_its_trans_cache_victim, victim->db,
-				   victim->devid, victim->eventid, victim->irq->intid);
-		vgic_put_irq(kvm, victim->irq);
+				   victim->devid, victim->eventid, irq->intid);
+		vgic_put_irq(kvm, irq);
 	}
 
 	kfree(victim);
@@ -726,19 +732,21 @@ void vgic_its_invalidate_cache(struct kvm *kvm)
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&dist->lpi_list_lock, flags);
+	rcu_read_lock();
 
 	list_for_each_entry(cte, &dist->lpi_translation_cache, entry) {
 		/*
 		 * If we hit a NULL entry, there is nothing after this
 		 * point.
 		 */
-		if (!cte->irq)
+		if (!rcu_access_pointer(cte->irq))
 			break;
 
 		vgic_put_irq(kvm, cte->irq);
-		cte->irq = NULL;
+		rcu_assign_pointer(cte->irq, NULL);
 	}
 
+	rcu_read_unlock();
 	raw_spin_unlock_irqrestore(&dist->lpi_list_lock, flags);
 }
 
