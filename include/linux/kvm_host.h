@@ -1927,6 +1927,10 @@ struct _kvm_stats_desc {
 			HALT_POLL_HIST_COUNT),				       \
 	STATS_DESC_IBOOLEAN(VCPU_GENERIC, blocking)
 
+#define KVM_VM_TRACE_EVENT(vm, event, ...)					\
+	((vm)->stat.event)++; trace_## event(__VA_ARGS__)
+
+
 extern struct dentry *kvm_debugfs_dir;
 
 ssize_t kvm_stats_read(char *id, const struct kvm_stats_header *header,

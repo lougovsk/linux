@@ -20,6 +20,7 @@
 #include <asm/kvm_arm.h>
 #include <asm/kvm_mmu.h>
 
+#include "trace.h"
 #include "vgic.h"
 #include "vgic-mmio.h"
 
@@ -636,8 +637,11 @@ static void vgic_its_cache_translation(struct kvm *kvm, struct vgic_its *its,
 	 * to the interrupt, so drop the potential reference on what
 	 * was in the cache, and increment it on the new interrupt.
 	 */
-	if (cte->irq)
+	if (cte->irq) {
+		KVM_VM_TRACE_EVENT(kvm, vgic_its_trans_cache_victim, cte->db,
+				   cte->devid, cte->eventid, cte->irq->intid);
 		__vgic_put_lpi_locked(kvm, cte->irq);
+	}
 
 	vgic_get_irq_kref(irq);
 
@@ -767,8 +771,14 @@ int vgic_its_inject_cached_translation(struct kvm *kvm, struct kvm_msi *msi)
 
 	db = (u64)msi->address_hi << 32 | msi->address_lo;
 	irq = vgic_its_check_cache(kvm, db, msi->devid, msi->data);
-	if (!irq)
+	if (!irq) {
+		KVM_VM_TRACE_EVENT(kvm, vgic_its_trans_cache_miss, db, msi->devid,
+				   msi->data);
 		return -EWOULDBLOCK;
+	}
+
+	KVM_VM_TRACE_EVENT(kvm, vgic_its_trans_cache_hit, db, msi->devid,
+			   msi->data, irq->intid);
 
 	raw_spin_lock_irqsave(&irq->irq_lock, flags);
 	irq->pending_latch = true;

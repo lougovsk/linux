@@ -30,7 +30,10 @@
 #include "trace.h"
 
 const struct _kvm_stats_desc kvm_vm_stats_desc[] = {
-	KVM_GENERIC_VM_STATS()
+	KVM_GENERIC_VM_STATS(),
+	STATS_DESC_COUNTER(VM, vgic_its_trans_cache_hit),
+	STATS_DESC_COUNTER(VM, vgic_its_trans_cache_miss),
+	STATS_DESC_COUNTER(VM, vgic_its_trans_cache_victim)
 };
 
 const struct kvm_stats_header kvm_vm_stats_header = {
