@@ -569,7 +569,7 @@ static struct vgic_irq *__vgic_its_check_cache(struct vgic_dist *dist,
 {
 	struct vgic_translation_cache_entry *cte;
 
-	list_for_each_entry(cte, &dist->lpi_translation_cache, entry) {
+	list_for_each_entry_rcu(cte, &dist->lpi_translation_cache, entry) {
 		/*
 		 * If we hit a NULL entry, there is nothing after this
 		 * point.
@@ -625,7 +625,7 @@ static struct vgic_translation_cache_entry *vgic_its_cache_victim(struct vgic_di
 	 * older entries in the case of a tie. Return the max usage count seen
 	 * during the scan to initialize the new cache entry.
 	 */
-	list_for_each_entry(cte, &dist->lpi_translation_cache, entry) {
+	list_for_each_entry_rcu(cte, &dist->lpi_translation_cache, entry) {
 		tmp = atomic64_read(&cte->usage_count);
 		max = max(max, tmp);
 
@@ -679,7 +679,7 @@ static void vgic_its_cache_translation(struct kvm *kvm, struct vgic_its *its,
 	if (dist->lpi_cache_count >= vgic_its_max_cache_size(kvm)) {
 		victim = vgic_its_cache_victim(dist, &usage);
 
-		list_del(&victim->entry);
+		list_del_rcu(&victim->entry);
 		dist->lpi_cache_count--;
 	}
 
@@ -697,7 +697,7 @@ static void vgic_its_cache_translation(struct kvm *kvm, struct vgic_its *its,
 	rcu_assign_pointer(new->irq, irq);
 
 	/* Move the new translation to the head of the list */
-	list_add(&new->entry, &dist->lpi_translation_cache);
+	list_add_rcu(&new->entry, &dist->lpi_translation_cache);
 	dist->lpi_cache_count++;
 
 out:
@@ -734,7 +734,7 @@ void vgic_its_invalidate_cache(struct kvm *kvm)
 	raw_spin_lock_irqsave(&dist->lpi_list_lock, flags);
 	rcu_read_lock();
 
-	list_for_each_entry(cte, &dist->lpi_translation_cache, entry) {
+	list_for_each_entry_rcu(cte, &dist->lpi_translation_cache, entry) {
 		/*
 		 * If we hit a NULL entry, there is nothing after this
 		 * point.
@@ -1981,7 +1981,7 @@ void vgic_lpi_translation_cache_destroy(struct kvm *kvm)
 
 	list_for_each_entry_safe(cte, tmp,
 				 &dist->lpi_translation_cache, entry) {
-		list_del(&cte->entry);
+		list_del_rcu(&cte->entry);
 		kfree(cte);
 	}
 }
