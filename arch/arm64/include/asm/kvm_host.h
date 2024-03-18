@@ -290,6 +290,8 @@ struct kvm_arch {
 #define KVM_ARCH_FLAG_ID_REGS_INITIALIZED		7
 	/* Fine-Grained UNDEF initialised */
 #define KVM_ARCH_FLAG_FGU_INITIALIZED			8
+	/* PSCI SYSTEM_OFF2 (hibernate) enabled for the guest */
+#define KVM_ARCH_FLAG_SYSTEM_OFF2_ENABLED		9
 	unsigned long flags;
 
 	/* VM-wide vCPU feature set */
