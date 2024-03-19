@@ -140,6 +140,9 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 		}
 		mutex_unlock(&kvm->slots_lock);
 		break;
+	case KVM_CAP_ARM_WFX_TRAP_RUNQUEUE_DEPTH:
+		kvm->arch.wfx_trap_runqueue_depth = cap->args[0];
+		break;
 	default:
 		break;
 	}
@@ -199,6 +202,7 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 
 	bitmap_zero(kvm->arch.vcpu_features, KVM_VCPU_MAX_FEATURES);
 
+	kvm->arch.wfx_trap_runqueue_depth = 1;
 	return 0;
 
 err_free_cpumask:
@@ -324,6 +328,7 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_ARM_SYSTEM_SUSPEND:
 	case KVM_CAP_IRQFD_RESAMPLE:
 	case KVM_CAP_COUNTER_OFFSET:
+	case KVM_CAP_ARM_WFX_TRAP_RUNQUEUE_DEPTH:
 		r = 1;
 		break;
 	case KVM_CAP_SET_GUEST_DEBUG2:
@@ -579,7 +584,7 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	if (kvm_arm_is_pvtime_enabled(&vcpu->arch))
 		kvm_make_request(KVM_REQ_RECORD_STEAL, vcpu);
 
-	if (single_task_running())
+	if (nr_running_this_cpu() <= vcpu->kvm->arch.wfx_trap_runqueue_depth)
 		vcpu_clear_wfx_traps(vcpu);
 	else
 		vcpu_set_wfx_traps(vcpu);

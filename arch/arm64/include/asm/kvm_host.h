@@ -339,6 +339,7 @@ struct kvm_arch {
 	 * the associated pKVM instance in the hypervisor.
 	 */
 	struct kvm_protected_vm pkvm;
+	u64 wfx_trap_runqueue_depth;
 };
 
 struct kvm_vcpu_fault_info {

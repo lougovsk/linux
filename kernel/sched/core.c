@@ -5428,7 +5428,7 @@ unsigned int nr_running(void)
 }
 
 /*
- * Check if only the current task is running on the CPU.
+ * Return number of tasks running on this CPU.
  *
  * Caution: this function does not check that the caller has disabled
  * preemption, thus the result might have a time-of-check-to-time-of-use
@@ -5440,9 +5440,20 @@ unsigned int nr_running(void)
  *
  * - in a loop with very short iterations (e.g. a polling loop)
  */
+unsigned int nr_running_this_cpu(void)
+{
+	return raw_rq()->nr_running;
+}
+EXPORT_SYMBOL(nr_running_this_cpu);
+
+/*
+ * Check if only the current task is running on the CPU.
+ *
+ * Caution: see warning for nr_running_this_cpu
+ */
 bool single_task_running(void)
 {
-	return raw_rq()->nr_running == 1;
+	return nr_running_this_cpu() == 1;
 }
 EXPORT_SYMBOL(single_task_running);
 
