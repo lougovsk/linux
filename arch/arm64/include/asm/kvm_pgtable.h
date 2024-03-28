@@ -19,11 +19,15 @@
  *  - 4K (level 1):	1GB
  *  - 16K (level 2):	32MB
  *  - 64K (level 2):	512MB
+ *
+ *  The max block level is the _smallest_ supported block size for KVM.
  */
 #ifdef CONFIG_ARM64_4K_PAGES
 #define KVM_PGTABLE_MIN_BLOCK_LEVEL	1
+#define KVM_PGTABLE_MAX_BLOCK_LEVEL	2
 #else
 #define KVM_PGTABLE_MIN_BLOCK_LEVEL	2
+#define KVM_PGTABLE_MAX_BLOCK_LEVEL	KVM_PGTABLE_MIN_BLOCK_LEVEL
 #endif
 
 #define kvm_lpa2_is_enabled()		system_supports_lpa2()
