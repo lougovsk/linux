@@ -47,6 +47,7 @@
 #include <kvm/arm_psci.h>
 
 static enum kvm_mode kvm_mode = KVM_MODE_DEFAULT;
+static enum kvm_interrupt_passthrough kvm_interrupt_passthrough = KVM_INTERRUPT_PASSTHROUGH_DEFAULT;
 
 DECLARE_KVM_HYP_PER_CPU(unsigned long, kvm_hyp_vector);
 
@@ -579,7 +580,10 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	if (kvm_arm_is_pvtime_enabled(&vcpu->arch))
 		kvm_make_request(KVM_REQ_RECORD_STEAL, vcpu);
 
-	if (single_task_running())
+	if ((kvm_interrupt_passthrough == KVM_INTERRUPT_PASSTHROUGH_ALWAYS
+	     && kvm_vgic_global_state.has_gicv4) ||
+	    (kvm_interrupt_passthrough == KVM_INTERRUPT_PASSTHROUGH_DEFAULT
+	     && single_task_running()))
 		vcpu_clear_wfx_traps(vcpu);
 	else
 		vcpu_set_wfx_traps(vcpu);
@@ -2781,6 +2785,30 @@ static int __init early_kvm_mode_cfg(char *arg)
 	return -EINVAL;
 }
 early_param("kvm-arm.mode", early_kvm_mode_cfg);
+
+static int __init early_kvm_interrupt_passthrough_cfg(char *arg)
+{
+	if (!arg)
+		return -EINVAL;
+
+	if (strcmp(arg, "always") == 0) {
+		kvm_interrupt_passthrough = KVM_INTERRUPT_PASSTHROUGH_ALWAYS;
+		return 0;
+	}
+
+	if (strcmp(arg, "never") == 0) {
+		kvm_interrupt_passthrough = KVM_INTERRUPT_PASSTHROUGH_NEVER;
+		return 0;
+	}
+
+	if (strcmp(arg, "default") == 0) {
+		kvm_interrupt_passthrough = KVM_INTERRUPT_PASSTHROUGH_DEFAULT;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+early_param("kvm-arm.interrupt-passthrough", early_kvm_interrupt_passthrough_cfg);
 
 enum kvm_mode kvm_get_mode(void)
 {

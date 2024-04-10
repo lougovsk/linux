@@ -67,6 +67,13 @@ enum kvm_mode {
 	KVM_MODE_NV,
 	KVM_MODE_NONE,
 };
+
+enum kvm_interrupt_passthrough {
+	KVM_INTERRUPT_PASSTHROUGH_DEFAULT,
+	KVM_INTERRUPT_PASSTHROUGH_ALWAYS,
+	KVM_INTERRUPT_PASSTHROUGH_NEVER,
+};
+
 #ifdef CONFIG_KVM
 enum kvm_mode kvm_get_mode(void);
 #else
