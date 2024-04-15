@@ -2443,15 +2443,15 @@ static int __init init_hyp_mode(void)
 	 * Allocate stack pages for Hypervisor-mode
 	 */
 	for_each_possible_cpu(cpu) {
-		unsigned long stack_page;
+		struct page *page;
 
-		stack_page = __get_free_page(GFP_KERNEL);
-		if (!stack_page) {
+		page = alloc_pages_node(cpu_to_node(cpu), GFP_KERNEL, 0);
+		if (!page) {
 			err = -ENOMEM;
 			goto out_err;
 		}
 
-		per_cpu(kvm_arm_hyp_stack_page, cpu) = stack_page;
+		per_cpu(kvm_arm_hyp_stack_page, cpu) = page_address(page);
 	}
 
 	/*
