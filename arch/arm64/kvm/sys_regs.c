@@ -2125,6 +2125,16 @@ static unsigned int hidden_user_visibility(const struct kvm_vcpu *vcpu,
 	.val = mask,				\
 }
 
+/* sys_reg_desc initialiser for writable AA32 ID registers */
+#define AA32_ID_WRITABLE(name, mask) {		\
+	ID_DESC(name),				\
+	.set_user = set_id_reg,			\
+	.visibility = aa32_id_visibility,	\
+	.reset = kvm_read_sanitised_id_reg,	\
+	.val = mask,				\
+}
+
+
 /*
  * sys_reg_desc initialiser for architecturally unallocated cpufeature ID
  * register with encoding Op0=3, Op1=0, CRn=0, CRm=crm, Op2=op2
@@ -2279,7 +2289,11 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	AA32_ID_SANITISED(ID_ISAR3_EL1),
 	AA32_ID_SANITISED(ID_ISAR4_EL1),
 	AA32_ID_SANITISED(ID_ISAR5_EL1),
-	AA32_ID_SANITISED(ID_MMFR4_EL1),
+	AA32_ID_WRITABLE(ID_MMFR4_EL1, ID_MMFR4_EL1_LSM |
+				       ID_MMFR4_EL1_HPDS |
+				       ID_MMFR4_EL1_CnP |
+				       ID_MMFR4_EL1_XNX |
+				       ID_MMFR4_EL1_AC2),
 	AA32_ID_SANITISED(ID_ISAR6_EL1),
 
 	/* CRm=3 */
