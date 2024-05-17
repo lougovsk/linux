@@ -209,6 +209,17 @@ void kvm_vcpu_put_vhe(struct kvm_vcpu *vcpu)
 	host_data_ptr(host_ctxt)->__hyp_running_vcpu = NULL;
 }
 
+static void __deactivate_fpsimd_sve_traps(struct kvm_vcpu *vcpu)
+{
+	u64 reg = CPACR_EL1_FPEN_EL0EN | CPACR_EL1_FPEN_EL1EN;
+
+	if (vcpu_has_sve(vcpu))
+		reg |= CPACR_EL1_ZEN_EL0EN | CPACR_EL1_ZEN_EL1EN;
+
+	sysreg_clear_set(cpacr_el1, 0, reg);
+	isb();
+}
+
 static bool kvm_hyp_handle_eret(struct kvm_vcpu *vcpu, u64 *exit_code)
 {
 	u64 esr = kvm_vcpu_get_esr(vcpu);
