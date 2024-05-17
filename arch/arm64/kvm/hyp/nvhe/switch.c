@@ -114,7 +114,8 @@ static void __deactivate_traps(struct kvm_vcpu *vcpu)
 
 static void __deactivate_fpsimd_sve_traps(struct kvm_vcpu *vcpu)
 {
-	bool clear_sve_traps = vcpu_has_sve(vcpu);
+	bool clear_sve_traps = vcpu_has_sve(vcpu) ||
+			       (is_protected_kvm_enabled() && system_supports_sve());
 	u64 reg;
 
 	if (has_hvhe()) {
@@ -205,7 +206,20 @@ static bool kvm_handle_pvm_sys64(struct kvm_vcpu *vcpu, u64 *exit_code)
 
 static void kvm_hyp_save_fpsimd_host(struct kvm_vcpu *vcpu)
 {
-	__fpsimd_save_state(*host_data_ptr(fpsimd_state));
+	/*
+	 * Non-protected kvm relies on the host restoring its sve state.
+	 * Protected kvm restores the host's sve state as not to reveal that
+	 * fpsimd was used by a guest nor leak upper sve bits.
+	 */
+	if (unlikely(is_protected_kvm_enabled() && system_supports_sve())) {
+		__hyp_sve_save_host();
+
+		/* Re-enable SVE traps for guests that do not support it. */
+		if (!vcpu_has_sve(vcpu))
+			sysreg_clear_set(cptr_el2, 0, CPTR_EL2_TZ);
+	} else {
+		__fpsimd_save_state(*host_data_ptr(fpsimd_state));
+	}
 }
 
 static const exit_handler_fn hyp_exit_handlers[] = {
