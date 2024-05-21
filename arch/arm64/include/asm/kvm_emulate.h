@@ -557,6 +557,40 @@ static __always_inline void kvm_incr_pc(struct kvm_vcpu *vcpu)
 		vcpu_set_flag((v), e);					\
 	} while (0)
 
+
+static inline void __cptr_clear_set_nvhe(u64 cpacr_clr, u64 cpacr_set)
+{
+	u64 clr = 0, set = 0;
+
+	if (cpacr_clr & CPACR_ELx_FPEN)
+		set |= CPTR_EL2_TFP;
+	if (cpacr_clr & CPACR_ELx_ZEN)
+		set |= CPTR_EL2_TZ;
+	if (cpacr_clr & CPACR_ELx_SMEN)
+		set |= CPTR_EL2_TSM;
+	if (cpacr_clr & CPACR_ELx_TTA)
+		clr |= CPTR_EL2_TTA;
+
+	if (cpacr_set & CPACR_ELx_FPEN)
+		clr |= CPTR_EL2_TFP;
+	if (cpacr_set & CPACR_ELx_ZEN)
+		clr |= CPTR_EL2_TZ;
+	if (cpacr_set & CPACR_ELx_SMEN)
+		clr |= CPTR_EL2_TSM;
+	if (cpacr_set & CPACR_ELx_TTA)
+		set |= CPTR_EL2_TTA;
+
+	sysreg_clear_set(cptr_el2, clr, set);
+}
+
+static inline void cpacr_clear_set(u64 clr, u64 set)
+{
+        if (has_vhe() || has_hvhe())
+                sysreg_clear_set(cpacr_el1, clr, set);
+        else
+                __cptr_clear_set_nvhe(clr, set);
+}
+
 static __always_inline void kvm_write_cptr_el2(u64 val)
 {
 	if (has_vhe() || has_hvhe())
