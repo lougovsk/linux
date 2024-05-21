@@ -535,7 +535,9 @@ struct kvm_cpu_context {
  */
 struct kvm_host_data {
 	struct kvm_cpu_context host_ctxt;
+
 	struct user_fpsimd_state *fpsimd_state;	/* hyp VA */
+	struct user_sve_state *sve_state;	/* hyp VA */
 
 	/* Ownership of the FP regs */
 	enum {

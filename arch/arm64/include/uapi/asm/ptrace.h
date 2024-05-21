@@ -120,6 +120,20 @@ struct user_sve_header {
 	__u16 __reserved;
 };
 
+struct user_sve_state {
+	__u64 zcr_el1;
+
+	/*
+	 * Ordering is important since __sve_save_state/__sve_restore_state
+	 * relies on it.
+	 */
+	__u32 fpsr;
+	__u32 fpcr;
+
+	/* Must be SVE_VQ_BYTES (128 bit) aligned. */
+	__u8 sve_regs[];
+};
+
 /* Definitions for user_sve_header.flags: */
 #define SVE_PT_REGS_MASK		(1 << 0)
 
