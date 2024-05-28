@@ -468,7 +468,7 @@ void handle_trap(struct kvm_cpu_context *host_ctxt)
 	case ESR_ELx_EC_SVE:
 		cpacr_clear_set(0, CPACR_ELx_ZEN);
 		isb();
-		sve_cond_update_zcr_vq(ZCR_ELx_LEN_MASK, SYS_ZCR_EL2);
+		write_sysreg_s(ZCR_ELx_LEN_MASK, SYS_ZCR_EL2);
 		break;
 	case ESR_ELx_EC_IABT_LOW:
 	case ESR_ELx_EC_DABT_LOW:
