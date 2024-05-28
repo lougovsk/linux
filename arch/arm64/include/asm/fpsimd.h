@@ -219,24 +219,6 @@ static inline void sve_user_enable(void)
 	sysreg_clear_set(cpacr_el1, 0, CPACR_EL1_ZEN_EL0EN);
 }
 
-#define __sve_cond_update_zcr_vq(val, reg, sync)	\
-	do {						\
-		u64 __zcr = read_sysreg_s((reg));	\
-		u64 __new = __zcr & ~ZCR_ELx_LEN_MASK;	\
-		__new |= (val) & ZCR_ELx_LEN_MASK;	\
-		if (__zcr != __new) {			\
-			write_sysreg_s(__new, (reg));	\
-			if (sync)			\
-				isb();			\
-		}					\
-	} while (0)
-
-#define sve_cond_update_zcr_vq(val, reg)		\
-	__sve_cond_update_zcr_vq(val, reg, false)
-
-#define sve_cond_update_zcr_vq_isb(val, reg)		\
-	__sve_cond_update_zcr_vq(val, reg, true)
-
 /*
  * Probing and setup functions.
  * Calls to these functions must be serialised with one another.
@@ -337,9 +319,6 @@ static inline bool sve_vq_available(unsigned int vq) { return false; }
 
 static inline void sve_user_disable(void) { BUILD_BUG(); }
 static inline void sve_user_enable(void) { BUILD_BUG(); }
-
-#define sve_cond_update_zcr_vq(val, reg) do { } while (0)
-#define sve_cond_update_zcr_vq_isb(val, reg) do { } while (0)
 
 static inline void vec_init_vq_map(enum vec_type t) { }
 static inline void vec_update_vq_map(enum vec_type t) { }

@@ -187,8 +187,8 @@ void kvm_arch_vcpu_put_fp(struct kvm_vcpu *vcpu)
 			 * role when doing the save from EL2.
 			 */
 			if (!has_vhe())
-				sve_cond_update_zcr_vq(vcpu_sve_max_vq(vcpu) - 1,
-						       SYS_ZCR_EL1);
+				write_sysreg_s(vcpu_sve_max_vq(vcpu) - 1,
+					       SYS_ZCR_EL1);
 		}
 
 		/*
