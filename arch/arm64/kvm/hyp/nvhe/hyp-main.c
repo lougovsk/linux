@@ -31,8 +31,7 @@ static void __hyp_sve_save_guest(struct kvm_vcpu *vcpu)
 	 * the guest. The layout of the data when saving the sve state depends
 	 * on the VL, so use a consistent (i.e., the maximum) guest VL.
 	 */
-	sve_cond_update_zcr_vq(vcpu_sve_max_vq(vcpu) - 1, SYS_ZCR_EL2);
-	isb();
+	sve_cond_update_zcr_vq_isb(vcpu_sve_max_vq(vcpu) - 1, SYS_ZCR_EL2);
 	__sve_save_state(vcpu_sve_pffr(vcpu), &vcpu->arch.ctxt.fp_regs.fpsr);
 	write_sysreg_s(ZCR_ELx_LEN_MASK, SYS_ZCR_EL2);
 }
