@@ -129,6 +129,7 @@ __ro_after_init struct vl_info vl_info[ARM64_VEC_MAX] = {
 		.min_vl			= SVE_VL_MIN,
 		.max_vl			= SVE_VL_MIN,
 		.max_virtualisable_vl	= SVE_VL_MIN,
+		.max_cpu_vl		= SVE_VL_MIN,
 	},
 #endif
 #ifdef CONFIG_ARM64_SME
@@ -1006,7 +1007,7 @@ int sme_get_current_vl(void)
 static void vec_probe_vqs(struct vl_info *info,
 			  DECLARE_BITMAP(map, SVE_VQ_MAX))
 {
-	unsigned int vq, vl;
+	unsigned int vq, vl, max_vl = 0;
 
 	bitmap_zero(map, SVE_VQ_MAX);
 
@@ -1031,7 +1032,12 @@ static void vec_probe_vqs(struct vl_info *info,
 
 		vq = sve_vq_from_vl(vl); /* skip intervening lengths */
 		set_bit(__vq_to_bit(vq), map);
+
+		if (!max_vl)
+			max_vl = vl;
 	}
+
+	info->max_cpu_vl = max((int) max_vl, info->max_cpu_vl);
 }
 
 /*
