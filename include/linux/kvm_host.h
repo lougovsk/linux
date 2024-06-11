@@ -258,6 +258,9 @@ int kvm_async_pf_wakeup_all(struct kvm_vcpu *vcpu);
 #ifdef CONFIG_KVM_GENERIC_MMU_NOTIFIER
 union kvm_mmu_notifier_arg {
 	unsigned long attributes;
+#ifdef CONFIG_HAVE_KVM_YOUNG_FAST_ONLY_NOTIFIER
+	bool *failed;
+#endif
 };
 
 struct kvm_gfn_range {
@@ -271,7 +274,11 @@ struct kvm_gfn_range {
 bool kvm_unmap_gfn_range(struct kvm *kvm, struct kvm_gfn_range *range);
 bool kvm_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range);
 bool kvm_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range);
+#ifdef CONFIG_HAVE_KVM_YOUNG_FAST_ONLY_NOTIFIER
+bool kvm_fast_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range);
+bool kvm_fast_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range);
 #endif
+#endif /* CONFIG_KVM_GENERIC_MMU_NOTIFIER */
 
 enum {
 	OUTSIDE_GUEST_MODE,
