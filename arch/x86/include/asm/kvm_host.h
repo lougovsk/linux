@@ -2338,4 +2338,11 @@ int memslot_rmap_alloc(struct kvm_memory_slot *slot, unsigned long npages);
  */
 #define KVM_EXIT_HYPERCALL_MBZ		GENMASK_ULL(31, 1)
 
+#define kvm_arch_young_notifier_likely_fast kvm_arch_young_notifier_likely_fast
+static inline bool kvm_arch_young_notifier_likely_fast(void)
+{
+	return IS_ENABLED(CONFIG_X86_64) && tdp_mmu_enabled &&
+		shadow_accessed_mask;
+}
+
 #endif /* _ASM_X86_KVM_HOST_H */
