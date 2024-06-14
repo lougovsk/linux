@@ -332,4 +332,18 @@ static inline void local_nmi_serror_enable(void)
 	irqflags.fields.allint = 0;
 	local_allint_restore_notrace(irqflags);
 }
+
+/*
+ * local_nmi_enable - Enable NMI with or without superpriority.
+ */
+static inline void local_nmi_enable(void)
+{
+	if (system_uses_irq_prio_masking()) {
+		gic_pmr_mask_irqs();
+		asm volatile ("msr daifclr, #3" : : : "memory");
+	} else if (system_uses_nmi()) {
+		asm volatile ("msr daifset, #3" : : : "memory");
+		msr_pstate_allint(0);
+	}
+}
 #endif
