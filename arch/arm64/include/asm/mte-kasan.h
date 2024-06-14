@@ -53,13 +53,13 @@ static inline bool system_uses_mte_async_or_asymm_mode(void)
  */
 static inline void mte_disable_tco(void)
 {
-	asm volatile(ALTERNATIVE("nop", SET_PSTATE_TCO(0),
+	asm volatile(ALTERNATIVE("nop", MSR_PSTATE_TCO(0),
 				 ARM64_MTE, CONFIG_KASAN_HW_TAGS));
 }
 
 static inline void mte_enable_tco(void)
 {
-	asm volatile(ALTERNATIVE("nop", SET_PSTATE_TCO(1),
+	asm volatile(ALTERNATIVE("nop", MSR_PSTATE_TCO(1),
 				 ARM64_MTE, CONFIG_KASAN_HW_TAGS));
 }
 

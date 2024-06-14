@@ -953,9 +953,9 @@ __sdei_handler(struct pt_regs *regs, struct sdei_registered_event *arg)
 	 * clearing it when the host isn't using it, in case a VM had it set.
 	 */
 	if (system_uses_hw_pan())
-		set_pstate_pan(1);
+		msr_pstate_pan(1);
 	else if (cpu_has_pan())
-		set_pstate_pan(0);
+		msr_pstate_pan(0);
 
 	arm64_enter_nmi(regs);
 	ret = do_sdei_event(regs, arg);

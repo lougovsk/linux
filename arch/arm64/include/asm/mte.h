@@ -174,7 +174,7 @@ static inline void mte_disable_tco_entry(struct task_struct *task)
 	 */
 	if (kasan_hw_tags_enabled() ||
 	    (task->thread.sctlr_user & (1UL << SCTLR_EL1_TCF0_SHIFT)))
-		asm volatile(SET_PSTATE_TCO(0));
+		asm volatile(MSR_PSTATE_TCO(0));
 }
 
 #ifdef CONFIG_KASAN_HW_TAGS

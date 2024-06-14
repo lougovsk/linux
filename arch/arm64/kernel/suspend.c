@@ -63,7 +63,7 @@ void notrace __cpu_suspend_exit(void)
 	 * features that might not have been set correctly.
 	 */
 	if (alternative_has_cap_unlikely(ARM64_HAS_DIT))
-		set_pstate_dit(1);
+		msr_pstate_dit(1);
 	__uaccess_enable_hw_pan();
 
 	/*

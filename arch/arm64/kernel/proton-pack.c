@@ -552,12 +552,12 @@ static enum mitigation_state spectre_v4_enable_hw_mitigation(void)
 
 	if (spectre_v4_mitigations_off()) {
 		sysreg_clear_set(sctlr_el1, 0, SCTLR_ELx_DSSBS);
-		set_pstate_ssbs(1);
+		msr_pstate_ssbs(1);
 		return SPECTRE_VULNERABLE;
 	}
 
 	/* SCTLR_EL1.DSSBS was initialised to 0 during boot */
-	set_pstate_ssbs(0);
+	msr_pstate_ssbs(0);
 
 	/*
 	 * SSBS is self-synchronizing and is intended to affect subsequent

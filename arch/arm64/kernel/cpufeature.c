@@ -2151,7 +2151,7 @@ static void cpu_enable_pan(const struct arm64_cpu_capabilities *__unused)
 	WARN_ON_ONCE(in_interrupt());
 
 	sysreg_clear_set(sctlr_el1, SCTLR_EL1_SPAN, 0);
-	set_pstate_pan(1);
+	msr_pstate_pan(1);
 }
 #endif /* CONFIG_ARM64_PAN */
 
@@ -2339,7 +2339,7 @@ static void cpu_trap_el0_impdef(const struct arm64_cpu_capabilities *__unused)
 
 static void cpu_enable_dit(const struct arm64_cpu_capabilities *__unused)
 {
-	set_pstate_dit(1);
+	msr_pstate_dit(1);
 }
 
 static void cpu_enable_mops(const struct arm64_cpu_capabilities *__unused)
