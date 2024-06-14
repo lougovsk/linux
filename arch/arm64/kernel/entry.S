@@ -316,8 +316,6 @@ alternative_else_nop_endif
 
 	mrs_s	x20, SYS_ICC_PMR_EL1
 	str	x20, [sp, #S_PMR_SAVE]
-	mov	x20, #GIC_PRIO_IRQON | GIC_PRIO_PSR_I_SET
-	msr_s	SYS_ICC_PMR_EL1, x20
 
 .Lskip_pmr_save\@:
 #endif

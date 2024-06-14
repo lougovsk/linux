@@ -121,28 +121,6 @@ static inline void local_daif_restore(unsigned long flags)
 }
 
 /*
- * Called by synchronous exception handlers to restore the DAIF bits that were
- * modified by taking an exception.
- */
-static inline void local_daif_inherit(struct pt_regs *regs)
-{
-	unsigned long flags = regs->pstate & DAIF_MASK;
-
-	if (interrupts_enabled(regs))
-		trace_hardirqs_on();
-
-	if (system_uses_irq_prio_masking())
-		gic_write_pmr(regs->pmr_save);
-
-	/*
-	 * We can't use local_daif_restore(regs->pstate) here as
-	 * system_has_prio_mask_debugging() won't restore the I bit if it can
-	 * use the pmr instead.
-	 */
-	write_sysreg(flags, daif);
-}
-
-/*
  * For Arm64 processor support Armv8.8 or later, kernel supports three types
  * of irqflags, they used for corresponding configuration depicted as below:
  *
@@ -382,6 +360,64 @@ static inline void local_allint_inherit(struct pt_regs *regs)
 	irqflags.fields.pmr = regs->pmr_save;
 	irqflags.fields.daif = regs->pstate & DAIF_MASK;
 	irqflags.fields.allint = regs->pstate & PSR_ALLINT_BIT;
+	__local_allint_restore(irqflags);
+}
+
+/*
+ * local_nmi_disable - Disable IRQ, FIQ and NMI, with or without superpriority.
+ */
+static inline void local_nmi_disable(void)
+{
+	arch_irqflags_t irqflags;
+
+	irqflags.fields.daif = DAIF_PROCCTX_NOIRQ;
+	irqflags.fields.pmr = GIC_PRIO_IRQON | GIC_PRIO_PSR_I_SET;
+	irqflags.fields.allint = PSR_ALLINT_BIT;
+	__local_allint_restore(irqflags);
+}
+
+/*
+ * local_irq_mark_enabled - When the kernel enables priority masking,
+ * interrupts cannot be handled util ICC_PMR_EL1 is set to GIC_PRIO_IRQON
+ * and PSTATE.IF is cleared. This helper function indicates that interrupts
+ * remains in a semi-masked state, requring further clearing of PSTATE.IF.
+ *
+ * Kernel will give a warning, if some function try to enable semi-masked
+ * interrupt via the arch_local_irq_enable() defined in <asm/irqflags.h>.
+ *
+ * This function is typically used before handling the Debug exception.
+ */
+static inline void local_irq_mark_enabled(void)
+{
+	if (system_uses_irq_prio_masking())
+		gic_write_pmr(GIC_PRIO_IRQON | GIC_PRIO_PSR_I_SET);
+}
+
+/*
+ * local_nmi_serror_disable - Disable all types of interrupt including IRQ,
+ * FIQ, Serror and NMI, with or without superpriority.
+ */
+static inline void local_nmi_serror_disable(void)
+{
+	arch_irqflags_t irqflags;
+
+	irqflags.fields.daif = DAIF_ERRCTX;
+	irqflags.fields.pmr = GIC_PRIO_IRQON | GIC_PRIO_PSR_I_SET;
+	irqflags.fields.allint = PSR_ALLINT_BIT;
+	__local_allint_restore(irqflags);
+}
+
+/*
+ * local_irq_serror_enable - Enable all types of interrupt including IRQ, FIQ,
+ * Serror and NMI, with or without superpriority.
+ */
+static inline void local_irq_serror_enable(void)
+{
+	arch_irqflags_t irqflags;
+
+	irqflags.fields.daif = DAIF_PROCCTX;
+	irqflags.fields.pmr = GIC_PRIO_IRQON;
+	irqflags.fields.allint = 0;
 	__local_allint_restore(irqflags);
 }
 #endif
