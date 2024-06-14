@@ -471,7 +471,7 @@ int psci_cpu_suspend_enter(u32 state)
 	int ret;
 
 	if (!psci_power_state_loses_context(state)) {
-		struct arm_cpuidle_irq_context context;
+		arch_irqflags_t context;
 
 		ct_cpuidle_enter();
 		arm_cpuidle_save_irq_context(&context);

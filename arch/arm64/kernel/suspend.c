@@ -99,7 +99,7 @@ int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
 	int ret = 0;
 	arch_irqflags_t flags;
 	struct sleep_stack_data state;
-	struct arm_cpuidle_irq_context context;
+	arch_irqflags_t context;
 
 	/*
 	 * Some portions of CPU state (e.g. PSTATE.{PAN,DIT}) are initialized

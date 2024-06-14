@@ -84,9 +84,9 @@ static inline void __local_nmi_mask(void)
 	msr_pstate_allint(1);
 }
 
-static inline void local_allint_mask_notrace(void)
+static inline void local_allint_mask_notrace(unsigned long daif_bits)
 {
-	asm volatile ("msr daifset, #0xf" : : : "memory");
+	write_sysreg(daif_bits, daif);
 
 	if (system_uses_irq_prio_masking())
 		__local_pmr_mask();
@@ -97,7 +97,7 @@ static inline void local_allint_mask_notrace(void)
 /* mask/save/unmask/restore all exceptions, including interrupts. */
 static inline void local_allint_mask(void)
 {
-	local_allint_mask_notrace();
+	local_allint_mask_notrace(DAIF_MASK);
 	trace_hardirqs_off();
 }
 
@@ -168,6 +168,17 @@ static inline arch_irqflags_t local_allint_save(void)
 	irqflags = local_allint_save_flags();
 
 	local_allint_mask();
+
+	return irqflags;
+}
+
+static inline arch_irqflags_t local_allint_save_notrace(void)
+{
+	arch_irqflags_t irqflags;
+
+	irqflags = local_allint_save_flags();
+
+	local_allint_mask_notrace(irqflags.fields.daif | PSR_I_BIT | PSR_F_BIT);
 
 	return irqflags;
 }

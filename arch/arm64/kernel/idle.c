@@ -22,7 +22,7 @@
  */
 void __cpuidle cpu_do_idle(void)
 {
-	struct arm_cpuidle_irq_context context;
+	arch_irqflags_t context;
 
 	arm_cpuidle_save_irq_context(&context);
 
