@@ -831,28 +831,7 @@ static void __gic_handle_irq_from_irqson(struct pt_regs *regs)
  */
 static void __gic_handle_irq_from_irqsoff(struct pt_regs *regs)
 {
-	u64 pmr;
-	u32 irqnr;
-
-	/*
-	 * We were in a context with IRQs disabled. However, the
-	 * entry code has set PMR to a value that allows any
-	 * interrupt to be acknowledged, and not just NMIs. This can
-	 * lead to surprising effects if the NMI has been retired in
-	 * the meantime, and that there is an IRQ pending. The IRQ
-	 * would then be taken in NMI context, something that nobody
-	 * wants to debug twice.
-	 *
-	 * Until we sort this, drop PMR again to a level that will
-	 * actually only allow NMIs before reading IAR, and then
-	 * restore it to what it was.
-	 */
-	pmr = gic_read_pmr();
-	gic_pmr_mask_irqs();
-	isb();
-	irqnr = gic_read_iar();
-	gic_write_pmr(pmr);
-
+	u32 irqnr = gic_read_iar();
 	__gic_handle_nmi(irqnr, regs);
 }
 
