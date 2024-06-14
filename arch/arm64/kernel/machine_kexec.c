@@ -176,7 +176,7 @@ void machine_kexec(struct kimage *kimage)
 
 	pr_info("Bye!\n");
 
-	local_daif_mask();
+	local_allint_mask();
 
 	/*
 	 * Both restart and kernel_reloc will shutdown the MMU, disable data

@@ -271,7 +271,7 @@ asmlinkage notrace void secondary_start_kernel(void)
 	 * as the root irqchip has already been detected and initialized we can
 	 * unmask IRQ and FIQ at the same time.
 	 */
-	local_daif_restore(DAIF_PROCCTX);
+	local_irq_serror_enable();
 
 	/*
 	 * OK, it's off to the idle thread for us
@@ -378,7 +378,7 @@ void __noreturn cpu_die(void)
 
 	idle_task_exit();
 
-	local_daif_mask();
+	local_allint_mask();
 
 	/* Tell cpuhp_bp_sync_dead() that this CPU is now safe to dispose of */
 	cpuhp_ap_report_dead();
@@ -817,7 +817,7 @@ static void __noreturn local_cpu_stop(void)
 {
 	set_cpu_online(smp_processor_id(), false);
 
-	local_daif_mask();
+	local_allint_mask();
 	sdei_mask_local_cpu();
 	cpu_park_loop();
 }

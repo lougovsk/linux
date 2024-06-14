@@ -375,12 +375,12 @@ int apei_claim_sea(struct pt_regs *regs)
 {
 	int err = -ENOENT;
 	bool return_to_irqs_enabled;
-	unsigned long current_flags;
+	arch_irqflags_t current_flags;
 
 	if (!IS_ENABLED(CONFIG_ACPI_APEI_GHES))
 		return err;
 
-	current_flags = local_daif_save_flags();
+	current_flags = local_allint_save_flags();
 
 	/* current_flags isn't useful here as daif doesn't tell us about pNMI */
 	return_to_irqs_enabled = !irqs_disabled_flags(arch_local_save_flags());
@@ -392,7 +392,7 @@ int apei_claim_sea(struct pt_regs *regs)
 	 * SEA can interrupt SError, mask it and describe this as an NMI so
 	 * that APEI defers the handling.
 	 */
-	local_daif_restore(DAIF_ERRCTX);
+	local_nmi_serror_disable();
 	nmi_enter();
 	err = ghes_notify_sea();
 	nmi_exit();
@@ -403,7 +403,7 @@ int apei_claim_sea(struct pt_regs *regs)
 	 */
 	if (!err) {
 		if (return_to_irqs_enabled) {
-			local_daif_restore(DAIF_PROCCTX_NOIRQ);
+			local_nmi_serror_enable();
 			__irq_enter();
 			irq_work_run();
 			__irq_exit();
@@ -413,7 +413,7 @@ int apei_claim_sea(struct pt_regs *regs)
 		}
 	}
 
-	local_daif_restore(current_flags);
+	local_allint_restore(current_flags);
 
 	return err;
 }

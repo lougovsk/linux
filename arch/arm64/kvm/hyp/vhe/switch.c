@@ -358,7 +358,7 @@ int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 {
 	int ret;
 
-	local_daif_mask();
+	local_allint_mask();
 
 	/*
 	 * Having IRQs masked via PMR when entering the guest means the GIC
@@ -377,7 +377,7 @@ int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	 * local_daif_restore() takes care to properly restore PSTATE.DAIF
 	 * and the GIC PMR if the host is using IRQ priorities.
 	 */
-	local_daif_restore(DAIF_PROCCTX_NOIRQ);
+	local_nmi_serror_enable();
 
 	/*
 	 * When we exit from the guest we change a number of CPU configuration

@@ -414,7 +414,7 @@ void __vgic_v3_init_lrs(void)
 u64 __vgic_v3_get_gic_config(void)
 {
 	u64 val, sre = read_gicreg(ICC_SRE_EL1);
-	unsigned long flags = 0;
+	arch_irqflags_t flags = ARCH_IRQFLAGS_INITIALIZER;
 
 	/*
 	 * To check whether we have a MMIO-based (GICv2 compatible)
@@ -427,7 +427,7 @@ u64 __vgic_v3_get_gic_config(void)
 	 * EL2.
 	 */
 	if (has_vhe())
-		flags = local_daif_save();
+		flags = local_allint_save();
 
 	/*
 	 * Table 11-2 "Permitted ICC_SRE_ELx.SRE settings" indicates
@@ -447,7 +447,7 @@ u64 __vgic_v3_get_gic_config(void)
 	isb();
 
 	if (has_vhe())
-		local_daif_restore(flags);
+		local_allint_restore(flags);
 
 	val  = (val & ICC_SRE_EL1_SRE) ? 0 : (1ULL << 63);
 	val |= read_gicreg(ICH_VTR_EL2);
