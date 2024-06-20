@@ -2094,6 +2094,7 @@ static int vgic_its_save_ite(struct vgic_its *its, struct its_device *dev,
 	       ((u64)ite->irq->intid << KVM_ITS_ITE_PINTID_SHIFT) |
 		ite->collection->collection_id;
 	val = cpu_to_le64(val);
+	BUG_ON(ite_esz > sizeof(val));
 	return vgic_write_guest_lock(kvm, gpa, &val, ite_esz);
 }
 
@@ -2246,6 +2247,7 @@ static int vgic_its_save_dte(struct vgic_its *its, struct its_device *dev,
 	       (itt_addr_field << KVM_ITS_DTE_ITTADDR_SHIFT) |
 		(dev->num_eventid_bits - 1));
 	val = cpu_to_le64(val);
+	BUG_ON(dte_esz > sizeof(dte_esz));
 	return vgic_write_guest_lock(kvm, ptr, &val, dte_esz);
 }
 
@@ -2433,6 +2435,7 @@ static int vgic_its_save_cte(struct vgic_its *its,
 	       ((u64)collection->target_addr << KVM_ITS_CTE_RDBASE_SHIFT) |
 	       collection->collection_id);
 	val = cpu_to_le64(val);
+	BUG_ON(esz > sizeof(val));
 	return vgic_write_guest_lock(its->dev->kvm, gpa, &val, esz);
 }
 
