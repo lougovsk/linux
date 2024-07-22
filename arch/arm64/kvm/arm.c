@@ -521,10 +521,10 @@ void kvm_arch_vcpu_unblocking(struct kvm_vcpu *vcpu)
 
 static void vcpu_set_pauth_traps(struct kvm_vcpu *vcpu)
 {
-	if (vcpu_has_ptrauth(vcpu)) {
+	if (vcpu_has_ptrauth(vcpu) && !vcpu_is_protected(vcpu)) {
 		/*
-		 * Either we're running running an L2 guest, and the API/APK
-		 * bits come from L1's HCR_EL2, or API/APK are both set.
+		 * Either we're running an L2 guest, and the API/APK bits come
+		 * from L1's HCR_EL2, or API/APK are both set.
 		 */
 		if (unlikely(vcpu_has_nv(vcpu) && !is_hyp_ctxt(vcpu))) {
 			u64 val;
@@ -551,6 +551,7 @@ static void vcpu_set_pauth_traps(struct kvm_vcpu *vcpu)
 
 		if (vcpu->arch.hcr_el2 & (HCR_API | HCR_APK)) {
 			struct kvm_cpu_context *ctxt;
+
 			ctxt = this_cpu_ptr_hyp_sym(kvm_hyp_ctxt);
 			ptrauth_save_keys(ctxt);
 		}
