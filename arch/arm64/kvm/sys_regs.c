@@ -1704,13 +1704,14 @@ static u64 read_sanitised_id_aa64pfr0_el1(struct kvm_vcpu *vcpu,
 	return val;
 }
 
-#define ID_REG_LIMIT_FIELD_ENUM(val, reg, field, limit)			       \
+#define ID_REG_LIMIT_FIELD_ENUM(val, reg, field, min_val, max_val)	       \
 ({									       \
 	u64 __f_val = FIELD_GET(reg##_##field##_MASK, val);		       \
+	(__f_val) = max_t(u64, __f_val, SYS_FIELD_VALUE(reg, field, min_val)); \
 	(val) &= ~reg##_##field##_MASK;					       \
 	(val) |= FIELD_PREP(reg##_##field##_MASK,			       \
 			    min(__f_val,				       \
-				(u64)SYS_FIELD_VALUE(reg, field, limit)));     \
+				(u64)SYS_FIELD_VALUE(reg, field, max_val)));   \
 	(val);								       \
 })
 
@@ -1719,7 +1720,7 @@ static u64 read_sanitised_id_aa64dfr0_el1(struct kvm_vcpu *vcpu,
 {
 	u64 val = read_sanitised_ftr_reg(SYS_ID_AA64DFR0_EL1);
 
-	val = ID_REG_LIMIT_FIELD_ENUM(val, ID_AA64DFR0_EL1, DebugVer, V8P8);
+	val = ID_REG_LIMIT_FIELD_ENUM(val, ID_AA64DFR0_EL1, DebugVer, V8P2, V8P8);
 
 	/*
 	 * Only initialize the PMU version if the vCPU was configured with one.
@@ -1732,6 +1733,10 @@ static u64 read_sanitised_id_aa64dfr0_el1(struct kvm_vcpu *vcpu,
 	/* Hide SPE from guests */
 	val &= ~ID_AA64DFR0_EL1_PMSVer_MASK;
 
+	/* Hide DoubleLock from guests */
+	val &= ~ID_AA64DFR0_EL1_DoubleLock_MASK;
+	val |= SYS_FIELD_PREP_ENUM(ID_AA64DFR0_EL1, DoubleLock, NI);
+
 	return val;
 }
 
@@ -1739,6 +1744,7 @@ static int set_id_aa64dfr0_el1(struct kvm_vcpu *vcpu,
 			       const struct sys_reg_desc *rd,
 			       u64 val)
 {
+	u64 hw_val = read_sanitised_ftr_reg(SYS_ID_AA64DFR0_EL1);
 	u8 debugver = SYS_FIELD_GET(ID_AA64DFR0_EL1, DebugVer, val);
 	u8 pmuver = SYS_FIELD_GET(ID_AA64DFR0_EL1, PMUVer, val);
 
@@ -1765,6 +1771,28 @@ static int set_id_aa64dfr0_el1(struct kvm_vcpu *vcpu,
 	 */
 	if (debugver < ID_AA64DFR0_EL1_DebugVer_IMP)
 		return -EINVAL;
+	else if (debugver < ID_AA64DFR0_EL1_DebugVer_V8P2) {
+		/*
+		 * KVM now reports a minimum DebugVer 8.2 to Guests. In order to keep
+		 * the migration working from old kernels, check and ignore the VMM
+		 * write.
+		 */
+		if ((hw_val & ID_AA64DFR0_EL1_DebugVer_MASK) ==
+		    (val & ID_AA64DFR0_EL1_DebugVer_MASK)) {
+			val &= ~ID_AA64DFR0_EL1_DebugVer_MASK;
+			val |= SYS_FIELD_PREP_ENUM(ID_AA64DFR0_EL1, DebugVer, V8P2);
+		}
+	}
+	/*
+	 * KVM used to expose OS double lock feature bit to Guests but returned
+	 * RAZ/WI on Guest OSDLR_EL1 access. We are hiding OS double lock now.
+	 * But for migration from old kernels to work ignore the VMM write.
+	 */
+	if ((hw_val & ID_AA64DFR0_EL1_DoubleLock_MASK) ==
+	    (val & ID_AA64DFR0_EL1_DoubleLock_MASK)) {
+		val &= ~ID_AA64DFR0_EL1_DoubleLock_MASK;
+		val |= SYS_FIELD_PREP_ENUM(ID_AA64DFR0_EL1, DoubleLock, NI);
+	}
 
 	return set_id_reg(vcpu, rd, val);
 }
@@ -1779,7 +1807,7 @@ static u64 read_sanitised_id_dfr0_el1(struct kvm_vcpu *vcpu,
 	if (kvm_vcpu_has_pmu(vcpu))
 		val |= SYS_FIELD_PREP(ID_DFR0_EL1, PerfMon, perfmon);
 
-	val = ID_REG_LIMIT_FIELD_ENUM(val, ID_DFR0_EL1, CopDbg, Debugv8p8);
+	val = ID_REG_LIMIT_FIELD_ENUM(val, ID_DFR0_EL1, CopDbg, NI, Debugv8p8);
 
 	return val;
 }
