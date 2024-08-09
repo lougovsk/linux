@@ -7082,7 +7082,8 @@ spec refer, https://github.com/riscv/riscv-sbi-doc.
 
 KVM_EXIT_MEMORY_FAULT indicates the vCPU has encountered a memory fault that
 could not be resolved by KVM.  The 'gpa' and 'size' (in bytes) describe the
-guest physical address range [gpa, gpa + size) of the fault.  The 'flags' field
+guest physical address range [gpa, gpa + size) of the fault: when zero, it
+indicates that the size of the fault could not be determined. The 'flags' field
 describes properties of the faulting access that are likely pertinent:
 
  - KVM_MEMORY_EXIT_FLAG_PRIVATE - When set, indicates the memory fault occurred
@@ -8140,7 +8141,7 @@ unavailable to host or other VMs.
 :Architectures: x86
 :Returns: Informational only, -EINVAL on direct KVM_ENABLE_CAP.
 
-The presence of this capability indicates that KVM_RUN will fill
+The presence of this capability indicates that KVM_RUN *may* fill
 kvm_run.memory_fault if KVM cannot resolve a guest page fault VM-Exit, e.g. if
 there is a valid memslot but no backing VMA for the corresponding host virtual
 address.
