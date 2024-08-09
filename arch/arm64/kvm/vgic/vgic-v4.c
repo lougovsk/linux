@@ -124,7 +124,6 @@ static void vgic_v4_enable_vsgis(struct kvm_vcpu *vcpu)
 	 */
 	for (i = 0; i < VGIC_NR_SGIS; i++) {
 		struct vgic_irq *irq = vgic_get_irq(vcpu->kvm, vcpu, i);
-		struct irq_desc *desc;
 		unsigned long flags;
 		int ret;
 
@@ -138,8 +137,7 @@ static void vgic_v4_enable_vsgis(struct kvm_vcpu *vcpu)
 
 		/* Transfer the full irq state to the vPE */
 		vgic_v4_sync_sgi_config(vpe, irq);
-		desc = irq_to_desc(irq->host_irq);
-		ret = irq_domain_activate_irq(irq_desc_get_irq_data(desc),
+		ret = irq_domain_activate_irq(irq_get_irq_data(irq->host_irq),
 					      false);
 		if (!WARN_ON(ret)) {
 			/* Transfer pending state */
@@ -161,7 +159,6 @@ static void vgic_v4_disable_vsgis(struct kvm_vcpu *vcpu)
 
 	for (i = 0; i < VGIC_NR_SGIS; i++) {
 		struct vgic_irq *irq = vgic_get_irq(vcpu->kvm, vcpu, i);
-		struct irq_desc *desc;
 		unsigned long flags;
 		int ret;
 
@@ -176,8 +173,7 @@ static void vgic_v4_disable_vsgis(struct kvm_vcpu *vcpu)
 					    &irq->pending_latch);
 		WARN_ON(ret);
 
-		desc = irq_to_desc(irq->host_irq);
-		irq_domain_deactivate_irq(irq_desc_get_irq_data(desc));
+		irq_domain_deactivate_irq(irq_get_irq_data(irq->host_irq));
 	unlock:
 		raw_spin_unlock_irqrestore(&irq->irq_lock, flags);
 		vgic_put_irq(vcpu->kvm, irq);
