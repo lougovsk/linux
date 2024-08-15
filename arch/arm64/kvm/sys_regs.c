@@ -2376,7 +2376,18 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	  .get_user = get_id_reg,
 	  .set_user = set_id_aa64dfr0_el1,
 	  .reset = read_sanitised_id_aa64dfr0_el1,
-	  .val = ID_AA64DFR0_EL1_PMUVer_MASK |
+	/*
+	 * We can't still make BRPs and CTX_CMPx writable as highest
+	 * numbered breakpoints must be context aware breakpoints(ARM ARM
+	 * DDI 0487K.a, section G2.8.2 Breakpoint types and linking of
+	 * breakpoints). Hence, if the number of non-context aware breakpoints
+	 * for the Guest is decreased by userspace, that will be problematic
+	 * as KVM will map context aware breakpoints for the vCPU to different
+	 * numbered breakpoints for the pCPU.
+	 */
+	  .val = ID_AA64DFR0_EL1_DoubleLock_MASK |
+		 ID_AA64DFR0_EL1_WRPs_MASK |
+		 ID_AA64DFR0_EL1_PMUVer_MASK |
 		 ID_AA64DFR0_EL1_DebugVer_MASK, },
 	ID_SANITISED(ID_AA64DFR1_EL1),
 	ID_UNALLOCATED(5,2),
