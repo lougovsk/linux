@@ -727,7 +727,14 @@ void vgic_v3_load(struct kvm_vcpu *vcpu)
 	if (has_vhe())
 		__vgic_v3_activate_traps(cpu_if);
 
-	WARN_ON(vgic_v4_load(vcpu));
+	/*
+	 * KVM does not virtualize GICv4 for the guest hypervisor, so there's no
+	 * vPE to load when in a nested state. The L1 vPE remains nonresident
+	 * so the GIC will generate a doorbell when a vLPI/vSGI becomes pending
+	 * for the L1.
+	 */
+	if (!vgic_is_nested_state(vcpu))
+		WARN_ON(vgic_v4_load(vcpu));
 }
 
 void vgic_v3_put(struct kvm_vcpu *vcpu)
@@ -735,6 +742,12 @@ void vgic_v3_put(struct kvm_vcpu *vcpu)
 	struct vgic_v3_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v3;
 
 	kvm_call_hyp(__vgic_v3_save_vmcr_aprs, cpu_if);
+
+	/*
+	 * The vPE may already be nonresident if we're blocking (i.e. already
+	 * called vgic_v4_put()) or in a nested state. Calling vgic_v4_put() on
+	 * an already nonresdent vCPU is benign.
+	 */
 	WARN_ON(vgic_v4_put(vcpu));
 
 	if (has_vhe())
