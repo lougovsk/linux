@@ -20,6 +20,9 @@ enum trap_behaviour {
 	BEHAVE_FORWARD_READ	= BIT(0),
 	BEHAVE_FORWARD_WRITE	= BIT(1),
 	BEHAVE_FORWARD_RW	= BEHAVE_FORWARD_READ | BEHAVE_FORWARD_WRITE,
+
+	/* Traps that take effect in Host EL0, this is rare! */
+	BEHAVE_IN_HOST_EL0	= BIT(2),
 };
 
 struct trap_bits {
@@ -478,7 +481,8 @@ static const complex_condition_check ccc[] = {
  * [20]		trap polarity (1 bit)
  * [25:21]	FG filter (5 bits)
  * [35:26]	Main SysReg table index (10 bits)
- * [62:36]	Unused (27 bits)
+ * [36]		Trap applies to Host EL0 (1 bit)
+ * [62:37]	Unused (26 bits)
  * [63]		RES0 - Must be zero, as lost on insertion in the xarray
  */
 #define TC_CGT_BITS	10
@@ -495,7 +499,8 @@ union trap_config {
 		unsigned long	pol:1;		 /* Polarity */
 		unsigned long	fgf:TC_FGF_BITS; /* Fine Grained Filter */
 		unsigned long	sri:TC_SRI_BITS; /* SysReg Index */
-		unsigned long	unused:27;	 /* Unused, should be zero */
+		unsigned long	in_host_el0:1;	 /* Applies to Host EL0 */
+		unsigned long	unused:26;	 /* Unused, should be zero */
 		unsigned long	mbz:1;		 /* Must Be Zero */
 	};
 };
@@ -1875,6 +1880,28 @@ static u32 encoding_next(u32 encoding)
 	return sys_reg(op0 + 1, 0, 0, 0, 0);
 }
 
+static bool trap_effective_in_host_el0(const enum cgt_group_id id)
+{
+	switch (id) {
+	case __RESERVED__ ... __MULTIPLE_CONTROL_BITS__ - 1:
+		return coarse_trap_bits[id].behaviour & BEHAVE_IN_HOST_EL0;
+	case __MULTIPLE_CONTROL_BITS__ ... __COMPLEX_CONDITIONS__ - 1: {
+		const enum cgt_group_id *cgids;
+		int i;
+
+		cgids = coarse_control_combo[id - __MULTIPLE_CONTROL_BITS__];
+		for (i = 0; cgids[i] != __RESERVED__; i++)
+			if (trap_effective_in_host_el0(cgids[i]))
+				return true;
+
+		return false;
+	}
+	/* Just treat complex traps as InHost for now. */
+	default:
+		return true;
+	}
+}
+
 int __init populate_nv_trap_config(void)
 {
 	int ret = 0;
@@ -1886,12 +1913,16 @@ int __init populate_nv_trap_config(void)
 
 	for (int i = 0; i < ARRAY_SIZE(encoding_to_cgt); i++) {
 		const struct encoding_to_trap_config *cgt = &encoding_to_cgt[i];
+		union trap_config tc = cgt->tc;
 		void *prev;
 
-		if (cgt->tc.val & BIT(63)) {
+		if (tc.val & BIT(63)) {
 			kvm_err("CGT[%d] has MBZ bit set\n", i);
 			ret = -EINVAL;
 		}
+
+		if (trap_effective_in_host_el0(tc.cgt))
+			tc.in_host_el0 = true;
 
 		for (u32 enc = cgt->encoding; enc <= cgt->end; enc = encoding_next(enc)) {
 			prev = xa_store(&sr_forward_xa, enc,
