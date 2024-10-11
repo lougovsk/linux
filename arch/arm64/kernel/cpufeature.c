@@ -3175,6 +3175,20 @@ static void setup_elf_hwcaps(const struct arm64_cpu_capabilities *hwcaps)
 			cap_set_elf_hwcap(hwcaps);
 }
 
+void arm_get_migrn_errata_map(void *target, unsigned long *errata_map)
+{
+	int i;
+	const struct arm64_cpu_capabilities *caps;
+
+	for (i = 0; i < ARM64_NCAPS; i++) {
+		caps = cpucap_ptrs[i];
+		if (!caps || !caps->migration_safe_cap ||
+		    !caps->matches(caps, cpucap_default_scope(caps), target))
+			continue;
+		__set_bit(caps->migration_safe_cap, errata_map);
+	}
+}
+
 static void update_cpu_capabilities(u16 scope_mask)
 {
 	int i;

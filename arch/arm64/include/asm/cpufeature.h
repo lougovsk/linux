@@ -335,6 +335,13 @@ struct arm64_cpu_capabilities {
 	const char *desc;
 	u16 capability;
 	u16 type;
+	/*
+	 * For Erratum only. This should be a static enum value separate from the
+	 * above generated capability value for this erratum. A non-zero value
+	 * here indicates whether this can be safely enabled for migration purposes
+	 * for a specified target CPU.
+	 */
+	u16 migration_safe_cap;
 	bool (*matches)(const struct arm64_cpu_capabilities *caps, int scope,
 			void *target);
 	/*
@@ -625,6 +632,7 @@ void __init setup_system_features(void);
 void __init setup_user_features(void);
 
 void check_local_cpu_capabilities(void);
+void arm_get_migrn_errata_map(void *migrn, unsigned long *errata_map);
 
 u64 read_sanitised_ftr_reg(u32 id);
 u64 __read_sysreg_by_encoding(u32 sys_id);

@@ -8,6 +8,7 @@
 #include <linux/arm-smccc.h>
 #include <linux/types.h>
 #include <linux/cpu.h>
+#include <linux/kvm.h>
 #include <asm/cpu.h>
 #include <asm/cputype.h>
 #include <asm/cpufeature.h>
@@ -19,14 +20,26 @@ is_affected_midr_range(const struct arm64_cpu_capabilities *entry, int scope,
 		       void *target)
 {
 	const struct arm64_midr_revidr *fix;
-	u32 midr = read_cpuid_id(), revidr;
+	struct migrn_target_cpu *t_cpu = target;
+	u32 midr, revidr;
 
-	WARN_ON(scope != SCOPE_LOCAL_CPU || preemptible());
+	if (t_cpu) {
+		midr = t_cpu->midr;
+	} else {
+		WARN_ON(scope != SCOPE_LOCAL_CPU || preemptible());
+		midr = read_cpuid_id();
+	}
+
 	if (!is_midr_in_range(midr, &entry->midr_range))
 		return false;
 
 	midr &= MIDR_REVISION_MASK | MIDR_VARIANT_MASK;
-	revidr = read_cpuid(REVIDR_EL1);
+
+	if (t_cpu)
+		revidr = t_cpu->revidr;
+	else
+		revidr = read_cpuid(REVIDR_EL1);
+
 	for (fix = entry->fixed_revs; fix && fix->revidr_mask; fix++)
 		if (midr == fix->midr_rv && (revidr & fix->revidr_mask))
 			return false;
@@ -38,18 +51,31 @@ static bool __maybe_unused
 is_affected_midr_range_list(const struct arm64_cpu_capabilities *entry,
 			    int scope, void *target)
 {
-	WARN_ON(scope != SCOPE_LOCAL_CPU || preemptible());
-	return is_midr_in_range_list(read_cpuid_id(), entry->midr_range_list);
+	struct migrn_target_cpu *t_cpu = target;
+	u32 midr;
+
+	if (t_cpu) {
+		midr = t_cpu->midr;
+	} else {
+		WARN_ON(scope != SCOPE_LOCAL_CPU || preemptible());
+		midr = read_cpuid_id();
+	}
+	return is_midr_in_range_list(midr, entry->midr_range_list);
 }
 
 static bool __maybe_unused
 is_kryo_midr(const struct arm64_cpu_capabilities *entry, int scope, void *target)
 {
+	struct migrn_target_cpu *t_cpu = target;
 	u32 model;
 
-	WARN_ON(scope != SCOPE_LOCAL_CPU || preemptible());
+	if (t_cpu) {
+		model = t_cpu->midr;
+	} else {
+		WARN_ON(scope != SCOPE_LOCAL_CPU || preemptible());
+		model = read_cpuid_id();
+	}
 
-	model = read_cpuid_id();
 	model &= MIDR_IMPLEMENTOR_MASK | (0xf00 << MIDR_PARTNUM_SHIFT) |
 		 MIDR_ARCHITECTURE_MASK;
 
@@ -187,11 +213,25 @@ static bool __maybe_unused
 has_neoverse_n1_erratum_1542419(const struct arm64_cpu_capabilities *entry,
 				int scope, void *target)
 {
-	u32 midr = read_cpuid_id();
-	bool has_dic = read_cpuid_cachetype() & BIT(CTR_EL0_DIC_SHIFT);
+	struct migrn_target_cpu *t_cpu = target;
+	u32 midr;
+	bool has_dic;
+
+	if (t_cpu) {
+		midr = t_cpu->midr;
+		/*
+		 * TBD: Should we pass CTR_EL0 as well? or treat this
+		 * as not safe for migration? For now set this as false.
+		 */
+		has_dic = false;
+	} else {
+		WARN_ON(scope != SCOPE_LOCAL_CPU || preemptible());
+		midr = read_cpuid_id();
+		has_dic = read_cpuid_cachetype() & BIT(CTR_EL0_DIC_SHIFT);
+	}
+
 	const struct midr_range range = MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N1);
 
-	WARN_ON(scope != SCOPE_LOCAL_CPU || preemptible());
 	return is_midr_in_range(midr, &range) && has_dic;
 }
 
