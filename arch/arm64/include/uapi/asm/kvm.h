@@ -540,6 +540,18 @@ struct reg_mask_range {
 	__u32 reserved[13];
 };
 
+struct migrn_target_cpu {
+	__u32 midr;
+	__u32 revidr;
+	__u32 aidr;
+	__u32 reserved;
+};
+
+struct kvm_arm_migrn_cpus {
+	__u32 ncpus;
+	struct migrn_target_cpu entries[] __counted_by(ncpus);
+};
+
 #endif
 
 #endif /* __ARM_KVM_H__ */

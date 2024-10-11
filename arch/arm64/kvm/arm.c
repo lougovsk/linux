@@ -48,6 +48,9 @@
 
 #include "sys_regs.h"
 
+/* For now set to 4 */
+#define MAX_MIGRN_TARGET_CPUS 4
+
 static enum kvm_mode kvm_mode = KVM_MODE_DEFAULT;
 
 enum kvm_wfx_trap_policy {
@@ -267,6 +270,7 @@ void kvm_arch_destroy_vm(struct kvm *kvm)
 	kvm_destroy_mpidr_data(kvm);
 
 	kfree(kvm->arch.sysreg_masks);
+	kfree(kvm->arch.migrn_cpu);
 	kvm_destroy_vcpus(kvm);
 
 	kvm_unshare_hyp(kvm, kvm + 1);
@@ -339,6 +343,7 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_ARM_SYSTEM_SUSPEND:
 	case KVM_CAP_IRQFD_RESAMPLE:
 	case KVM_CAP_COUNTER_OFFSET:
+	case KVM_CAP_ARM_MIGRN_TARGET_CPUS:
 		r = 1;
 		break;
 	case KVM_CAP_SET_GUEST_DEBUG2:
@@ -1903,6 +1908,39 @@ int kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		if (copy_from_user(&range, argp, sizeof(range)))
 			return -EFAULT;
 		return kvm_vm_ioctl_get_reg_writable_masks(kvm, &range);
+	}
+	case KVM_ARM_SET_MIGRN_TARGET_CPUS: {
+		struct kvm_arm_migrn_cpus __user *user_cpus = argp;
+		struct kvm_arm_migrn_cpus cpus;
+		struct migrn_target_cpu *entries;
+		u32 size;
+		int ret;
+
+		mutex_lock(&kvm->lock);
+		if (kvm->arch.num_migrn_cpus) {
+			ret = -EINVAL;
+			goto migrn_target_cpus_unlock;
+		}
+		if (copy_from_user(&cpus, user_cpus, sizeof(*user_cpus))) {
+			ret = -EFAULT;
+			goto migrn_target_cpus_unlock;
+		}
+		if (cpus.ncpus > MAX_MIGRN_TARGET_CPUS) {
+			ret = -E2BIG;
+			goto migrn_target_cpus_unlock;
+		}
+		size = sizeof(struct migrn_target_cpu) * cpus.ncpus;
+		entries = memdup_user(user_cpus->entries, size);
+		if (IS_ERR(entries)) {
+			ret = PTR_ERR(entries);
+			goto migrn_target_cpus_unlock;
+		}
+		kvm->arch.num_migrn_cpus = cpus.ncpus;
+		kvm->arch.migrn_cpu = entries;
+		ret = 0;
+migrn_target_cpus_unlock:
+		mutex_unlock(&kvm->lock);
+		return ret;
 	}
 	default:
 		return -EINVAL;

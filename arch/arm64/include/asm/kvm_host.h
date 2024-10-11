@@ -375,6 +375,9 @@ struct kvm_arch {
 	 * the associated pKVM instance in the hypervisor.
 	 */
 	struct kvm_protected_vm pkvm;
+
+	u32 num_migrn_cpus;
+	struct migrn_target_cpu *migrn_cpu;
 };
 
 struct kvm_vcpu_fault_info {
