@@ -15,7 +15,8 @@
 #include <asm/smp_plat.h>
 
 static bool __maybe_unused
-is_affected_midr_range(const struct arm64_cpu_capabilities *entry, int scope)
+is_affected_midr_range(const struct arm64_cpu_capabilities *entry, int scope,
+		       void *target)
 {
 	const struct arm64_midr_revidr *fix;
 	u32 midr = read_cpuid_id(), revidr;
@@ -35,14 +36,14 @@ is_affected_midr_range(const struct arm64_cpu_capabilities *entry, int scope)
 
 static bool __maybe_unused
 is_affected_midr_range_list(const struct arm64_cpu_capabilities *entry,
-			    int scope)
+			    int scope, void *target)
 {
 	WARN_ON(scope != SCOPE_LOCAL_CPU || preemptible());
 	return is_midr_in_range_list(read_cpuid_id(), entry->midr_range_list);
 }
 
 static bool __maybe_unused
-is_kryo_midr(const struct arm64_cpu_capabilities *entry, int scope)
+is_kryo_midr(const struct arm64_cpu_capabilities *entry, int scope, void *target)
 {
 	u32 model;
 
@@ -57,7 +58,7 @@ is_kryo_midr(const struct arm64_cpu_capabilities *entry, int scope)
 
 static bool
 has_mismatched_cache_type(const struct arm64_cpu_capabilities *entry,
-			  int scope)
+			  int scope, void *__unused)
 {
 	u64 mask = arm64_ftr_reg_ctrel0.strict_mask;
 	u64 sys = arm64_ftr_reg_ctrel0.sys_val & mask;
@@ -109,9 +110,9 @@ cpu_enable_trap_ctr_access(const struct arm64_cpu_capabilities *cap)
 #ifdef CONFIG_ARM64_ERRATUM_1463225
 static bool
 has_cortex_a76_erratum_1463225(const struct arm64_cpu_capabilities *entry,
-			       int scope)
+			       int scope, void *target)
 {
-	return is_affected_midr_range_list(entry, scope) && is_kernel_in_hyp_mode();
+	return is_affected_midr_range_list(entry, scope, target) && is_kernel_in_hyp_mode();
 }
 #endif
 
@@ -166,11 +167,11 @@ static const __maybe_unused struct midr_range tx2_family_cpus[] = {
 
 static bool __maybe_unused
 needs_tx2_tvm_workaround(const struct arm64_cpu_capabilities *entry,
-			 int scope)
+			 int scope, void *target)
 {
 	int i;
 
-	if (!is_affected_midr_range_list(entry, scope) ||
+	if (!is_affected_midr_range_list(entry, scope, target) ||
 	    !is_hyp_mode_available())
 		return false;
 
@@ -184,7 +185,7 @@ needs_tx2_tvm_workaround(const struct arm64_cpu_capabilities *entry,
 
 static bool __maybe_unused
 has_neoverse_n1_erratum_1542419(const struct arm64_cpu_capabilities *entry,
-				int scope)
+				int scope, void *target)
 {
 	u32 midr = read_cpuid_id();
 	bool has_dic = read_cpuid_cachetype() & BIT(CTR_EL0_DIC_SHIFT);

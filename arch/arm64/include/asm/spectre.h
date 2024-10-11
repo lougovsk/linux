@@ -82,21 +82,21 @@ static __always_inline void arm64_apply_bp_hardening(void)
 }
 
 enum mitigation_state arm64_get_spectre_v2_state(void);
-bool has_spectre_v2(const struct arm64_cpu_capabilities *cap, int scope);
+bool has_spectre_v2(const struct arm64_cpu_capabilities *cap, int scope, void *target);
 void spectre_v2_enable_mitigation(const struct arm64_cpu_capabilities *__unused);
 
-bool has_spectre_v3a(const struct arm64_cpu_capabilities *cap, int scope);
+bool has_spectre_v3a(const struct arm64_cpu_capabilities *cap, int scope, void *target);
 void spectre_v3a_enable_mitigation(const struct arm64_cpu_capabilities *__unused);
 
 enum mitigation_state arm64_get_spectre_v4_state(void);
-bool has_spectre_v4(const struct arm64_cpu_capabilities *cap, int scope);
+bool has_spectre_v4(const struct arm64_cpu_capabilities *cap, int scope, void *target);
 void spectre_v4_enable_mitigation(const struct arm64_cpu_capabilities *__unused);
 void spectre_v4_enable_task_mitigation(struct task_struct *tsk);
 
 enum mitigation_state arm64_get_meltdown_state(void);
 
 enum mitigation_state arm64_get_spectre_bhb_state(void);
-bool is_spectre_bhb_affected(const struct arm64_cpu_capabilities *entry, int scope);
+bool is_spectre_bhb_affected(const struct arm64_cpu_capabilities *entry, int scope, void *target);
 u8 spectre_bhb_loop_affected(int scope);
 void spectre_bhb_enable_mitigation(const struct arm64_cpu_capabilities *__unused);
 bool try_emulate_el1_ssbs(struct pt_regs *regs, u32 instr);

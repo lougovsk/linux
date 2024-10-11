@@ -1538,7 +1538,7 @@ u64 __read_sysreg_by_encoding(u32 sys_id)
 #include <linux/irqchip/arm-gic-v3.h>
 
 static bool
-has_always(const struct arm64_cpu_capabilities *entry, int scope)
+has_always(const struct arm64_cpu_capabilities *entry, int scope, void *__unused)
 {
 	return true;
 }
@@ -1581,7 +1581,8 @@ read_scoped_sysreg(const struct arm64_cpu_capabilities *entry, int scope)
 }
 
 static bool
-has_user_cpuid_feature(const struct arm64_cpu_capabilities *entry, int scope)
+has_user_cpuid_feature(const struct arm64_cpu_capabilities *entry, int scope,
+		       void *__unused)
 {
 	int mask;
 	struct arm64_ftr_reg *regp;
@@ -1601,7 +1602,8 @@ has_user_cpuid_feature(const struct arm64_cpu_capabilities *entry, int scope)
 }
 
 static bool
-has_cpuid_feature(const struct arm64_cpu_capabilities *entry, int scope)
+has_cpuid_feature(const struct arm64_cpu_capabilities *entry, int scope,
+		  void *__unused)
 {
 	u64 val = read_scoped_sysreg(entry, scope);
 	return feature_matches(val, entry);
@@ -1651,9 +1653,10 @@ static int __init aarch32_el0_sysfs_init(void)
 }
 device_initcall(aarch32_el0_sysfs_init);
 
-static bool has_32bit_el0(const struct arm64_cpu_capabilities *entry, int scope)
+static bool has_32bit_el0(const struct arm64_cpu_capabilities *entry, int scope,
+			  void *__unused)
 {
-	if (!has_cpuid_feature(entry, scope))
+	if (!has_cpuid_feature(entry, scope, NULL))
 		return allow_mismatched_32bit_el0;
 
 	if (scope == SCOPE_SYSTEM)
@@ -1662,11 +1665,12 @@ static bool has_32bit_el0(const struct arm64_cpu_capabilities *entry, int scope)
 	return true;
 }
 
-static bool has_useable_gicv3_cpuif(const struct arm64_cpu_capabilities *entry, int scope)
+static bool has_useable_gicv3_cpuif(const struct arm64_cpu_capabilities *entry, int scope,
+				    void *__unused)
 {
 	bool has_sre;
 
-	if (!has_cpuid_feature(entry, scope))
+	if (!has_cpuid_feature(entry, scope, NULL))
 		return false;
 
 	has_sre = gic_enable_sre();
@@ -1678,7 +1682,7 @@ static bool has_useable_gicv3_cpuif(const struct arm64_cpu_capabilities *entry, 
 }
 
 static bool has_cache_idc(const struct arm64_cpu_capabilities *entry,
-			  int scope)
+			  int scope, void *__unused)
 {
 	u64 ctr;
 
@@ -1703,7 +1707,7 @@ static void cpu_emulate_effective_ctr(const struct arm64_cpu_capabilities *__unu
 }
 
 static bool has_cache_dic(const struct arm64_cpu_capabilities *entry,
-			  int scope)
+			  int scope, void *__unused)
 {
 	u64 ctr;
 
@@ -1716,7 +1720,8 @@ static bool has_cache_dic(const struct arm64_cpu_capabilities *entry,
 }
 
 static bool __maybe_unused
-has_useable_cnp(const struct arm64_cpu_capabilities *entry, int scope)
+has_useable_cnp(const struct arm64_cpu_capabilities *entry, int scope,
+		void *__unused)
 {
 	/*
 	 * Kdump isn't guaranteed to power-off all secondary CPUs, CNP
@@ -1729,14 +1734,14 @@ has_useable_cnp(const struct arm64_cpu_capabilities *entry, int scope)
 	if (cpus_have_cap(ARM64_WORKAROUND_NVIDIA_CARMEL_CNP))
 		return false;
 
-	return has_cpuid_feature(entry, scope);
+	return has_cpuid_feature(entry, scope, NULL);
 }
 
 static bool __meltdown_safe = true;
 static int __kpti_forced; /* 0: not forced, >0: forced on, <0: forced off */
 
 static bool unmap_kernel_at_el0(const struct arm64_cpu_capabilities *entry,
-				int scope)
+				int scope, void *__unused)
 {
 	/* List of CPUs that are not vulnerable and don't need KPTI */
 	static const struct midr_range kpti_safe_list[] = {
@@ -1763,7 +1768,7 @@ static bool unmap_kernel_at_el0(const struct arm64_cpu_capabilities *entry,
 	meltdown_safe = is_midr_in_range_list(read_cpuid_id(), kpti_safe_list);
 
 	/* Defer to CPU feature registers */
-	if (has_cpuid_feature(entry, scope))
+	if (has_cpuid_feature(entry, scope, NULL))
 		meltdown_safe = true;
 
 	if (!meltdown_safe)
@@ -1811,7 +1816,8 @@ static bool unmap_kernel_at_el0(const struct arm64_cpu_capabilities *entry,
 	return !meltdown_safe;
 }
 
-static bool has_nv1(const struct arm64_cpu_capabilities *entry, int scope)
+static bool has_nv1(const struct arm64_cpu_capabilities *entry, int scope,
+		    void *__unused)
 {
 	/*
 	 * Although the Apple M2 family appears to support NV1, the
@@ -1829,7 +1835,7 @@ static bool has_nv1(const struct arm64_cpu_capabilities *entry, int scope)
 	};
 
 	return (__system_matches_cap(ARM64_HAS_NESTED_VIRT) &&
-		!(has_cpuid_feature(entry, scope) ||
+		!(has_cpuid_feature(entry, scope, NULL) ||
 		  is_midr_in_range_list(read_cpuid_id(), nv1_ni_list)));
 }
 
@@ -1852,7 +1858,8 @@ static bool has_lpa2_at_stage2(u64 mmfr0)
 	return tgran == ID_AA64MMFR0_EL1_TGRAN_2_SUPPORTED_LPA2;
 }
 
-static bool has_lpa2(const struct arm64_cpu_capabilities *entry, int scope)
+static bool has_lpa2(const struct arm64_cpu_capabilities *entry, int scope,
+		     void *__unused)
 {
 	u64 mmfr0;
 
@@ -1860,7 +1867,8 @@ static bool has_lpa2(const struct arm64_cpu_capabilities *entry, int scope)
 	return has_lpa2_at_stage1(mmfr0) && has_lpa2_at_stage2(mmfr0);
 }
 #else
-static bool has_lpa2(const struct arm64_cpu_capabilities *entry, int scope)
+static bool has_lpa2(const struct arm64_cpu_capabilities *entry, int scope,
+		     void *__unused)
 {
 	return false;
 }
@@ -2018,7 +2026,7 @@ static bool cpu_has_broken_dbm(void)
 
 static bool cpu_can_use_dbm(const struct arm64_cpu_capabilities *cap)
 {
-	return has_cpuid_feature(cap, SCOPE_LOCAL_CPU) &&
+	return has_cpuid_feature(cap, SCOPE_LOCAL_CPU, NULL) &&
 	       !cpu_has_broken_dbm();
 }
 
@@ -2031,7 +2039,7 @@ static void cpu_enable_hw_dbm(struct arm64_cpu_capabilities const *cap)
 }
 
 static bool has_hw_dbm(const struct arm64_cpu_capabilities *cap,
-		       int __unused)
+		       int __unused, void *__unused2)
 {
 	/*
 	 * DBM is a non-conflicting feature. i.e, the kernel can safely
@@ -2071,7 +2079,7 @@ int get_cpu_with_amu_feat(void)
 
 static void cpu_amu_enable(struct arm64_cpu_capabilities const *cap)
 {
-	if (has_cpuid_feature(cap, SCOPE_LOCAL_CPU)) {
+	if (has_cpuid_feature(cap, SCOPE_LOCAL_CPU, NULL)) {
 		cpumask_set_cpu(smp_processor_id(), &amu_cpus);
 
 		/* 0 reference values signal broken/disabled counters */
@@ -2081,7 +2089,7 @@ static void cpu_amu_enable(struct arm64_cpu_capabilities const *cap)
 }
 
 static bool has_amu(const struct arm64_cpu_capabilities *cap,
-		    int __unused)
+		    int __unused, void *__unused2)
 {
 	/*
 	 * The AMU extension is a non-conflicting feature: the kernel can
@@ -2105,7 +2113,8 @@ int get_cpu_with_amu_feat(void)
 }
 #endif
 
-static bool runs_at_el2(const struct arm64_cpu_capabilities *entry, int __unused)
+static bool runs_at_el2(const struct arm64_cpu_capabilities *entry, int __unused,
+			void *__unused2)
 {
 	return is_kernel_in_hyp_mode();
 }
@@ -2125,12 +2134,12 @@ static void cpu_copy_el2regs(const struct arm64_cpu_capabilities *__unused)
 }
 
 static bool has_nested_virt_support(const struct arm64_cpu_capabilities *cap,
-				    int scope)
+				    int scope, void *__unused)
 {
 	if (kvm_get_mode() != KVM_MODE_NV)
 		return false;
 
-	if (!has_cpuid_feature(cap, scope)) {
+	if (!has_cpuid_feature(cap, scope, NULL)) {
 		pr_warn("unavailable: %s\n", cap->desc);
 		return false;
 	}
@@ -2139,7 +2148,7 @@ static bool has_nested_virt_support(const struct arm64_cpu_capabilities *cap,
 }
 
 static bool hvhe_possible(const struct arm64_cpu_capabilities *entry,
-			  int __unused)
+			  int __unused, void *__unused2)
 {
 	return arm64_test_sw_feature_override(ARM64_SW_FEATURE_OVERRIDE_HVHE);
 }
@@ -2167,7 +2176,8 @@ static void cpu_clear_disr(const struct arm64_cpu_capabilities *__unused)
 #endif /* CONFIG_ARM64_RAS_EXTN */
 
 #ifdef CONFIG_ARM64_PTR_AUTH
-static bool has_address_auth_cpucap(const struct arm64_cpu_capabilities *entry, int scope)
+static bool has_address_auth_cpucap(const struct arm64_cpu_capabilities *entry, int scope,
+				    void *__unused)
 {
 	int boot_val, sec_val;
 
@@ -2194,17 +2204,20 @@ static bool has_address_auth_cpucap(const struct arm64_cpu_capabilities *entry, 
 }
 
 static bool has_address_auth_metacap(const struct arm64_cpu_capabilities *entry,
-				     int scope)
+				     int scope, void *__unused)
 {
-	bool api = has_address_auth_cpucap(cpucap_ptrs[ARM64_HAS_ADDRESS_AUTH_IMP_DEF], scope);
-	bool apa = has_address_auth_cpucap(cpucap_ptrs[ARM64_HAS_ADDRESS_AUTH_ARCH_QARMA5], scope);
-	bool apa3 = has_address_auth_cpucap(cpucap_ptrs[ARM64_HAS_ADDRESS_AUTH_ARCH_QARMA3], scope);
+	bool api = has_address_auth_cpucap(cpucap_ptrs[ARM64_HAS_ADDRESS_AUTH_IMP_DEF],
+					   scope, NULL);
+	bool apa = has_address_auth_cpucap(cpucap_ptrs[ARM64_HAS_ADDRESS_AUTH_ARCH_QARMA5],
+					   scope, NULL);
+	bool apa3 = has_address_auth_cpucap(cpucap_ptrs[ARM64_HAS_ADDRESS_AUTH_ARCH_QARMA3], scope,
+					    NULL);
 
 	return apa || apa3 || api;
 }
 
 static bool has_generic_auth(const struct arm64_cpu_capabilities *entry,
-			     int __unused)
+			     int __unused, void *__unused2)
 {
 	bool gpi = __system_matches_cap(ARM64_HAS_GENERIC_AUTH_IMP_DEF);
 	bool gpa = __system_matches_cap(ARM64_HAS_GENERIC_AUTH_ARCH_QARMA5);
@@ -2224,7 +2237,7 @@ static void cpu_enable_e0pd(struct arm64_cpu_capabilities const *cap)
 
 #ifdef CONFIG_ARM64_PSEUDO_NMI
 static bool can_use_gic_priorities(const struct arm64_cpu_capabilities *entry,
-				   int scope)
+				   int scope, void *__unused)
 {
 	/*
 	 * ARM64_HAS_GIC_CPUIF_SYSREGS has a lower index, and is a boot CPU
@@ -2238,7 +2251,7 @@ static bool can_use_gic_priorities(const struct arm64_cpu_capabilities *entry,
 }
 
 static bool has_gic_prio_relaxed_sync(const struct arm64_cpu_capabilities *entry,
-				      int scope)
+				      int scope, void *__unused)
 {
 	/*
 	 * If we're not using priority masking then we won't be poking PMR_EL1,
@@ -2329,7 +2342,8 @@ static void elf_hwcap_fixup(void)
 }
 
 #ifdef CONFIG_KVM
-static bool is_kvm_protected_mode(const struct arm64_cpu_capabilities *entry, int __unused)
+static bool is_kvm_protected_mode(const struct arm64_cpu_capabilities *entry, int __unused,
+				  void *__unused2)
 {
 	return kvm_get_mode() == KVM_MODE_PROTECTED;
 }
@@ -3061,7 +3075,8 @@ static const struct arm64_cpu_capabilities arm64_elf_hwcaps[] = {
 };
 
 #ifdef CONFIG_COMPAT
-static bool compat_has_neon(const struct arm64_cpu_capabilities *cap, int scope)
+static bool compat_has_neon(const struct arm64_cpu_capabilities *cap, int scope,
+			    void *__unused)
 {
 	/*
 	 * Check that all of MVFR1_EL1.{SIMDSP, SIMDInt, SIMDLS} are available,
@@ -3156,7 +3171,7 @@ static void setup_elf_hwcaps(const struct arm64_cpu_capabilities *hwcaps)
 	/* We support emulation of accesses to CPU ID feature registers */
 	cpu_set_named_feature(CPUID);
 	for (; hwcaps->matches; hwcaps++)
-		if (hwcaps->matches(hwcaps, cpucap_default_scope(hwcaps)))
+		if (hwcaps->matches(hwcaps, cpucap_default_scope(hwcaps), NULL))
 			cap_set_elf_hwcap(hwcaps);
 }
 
@@ -3170,7 +3185,7 @@ static void update_cpu_capabilities(u16 scope_mask)
 		caps = cpucap_ptrs[i];
 		if (!caps || !(caps->type & scope_mask) ||
 		    cpus_have_cap(caps->capability) ||
-		    !caps->matches(caps, cpucap_default_scope(caps)))
+		    !caps->matches(caps, cpucap_default_scope(caps), NULL))
 			continue;
 
 		if (caps->desc && !caps->cpus)
@@ -3268,7 +3283,7 @@ static void verify_local_cpu_caps(u16 scope_mask)
 		if (!caps || !(caps->type & scope_mask))
 			continue;
 
-		cpu_has_cap = caps->matches(caps, SCOPE_LOCAL_CPU);
+		cpu_has_cap = caps->matches(caps, SCOPE_LOCAL_CPU, NULL);
 		system_has_cap = cpus_have_cap(caps->capability);
 
 		if (system_has_cap) {
@@ -3324,7 +3339,7 @@ __verify_local_elf_hwcaps(const struct arm64_cpu_capabilities *caps)
 {
 
 	for (; caps->matches; caps++)
-		if (cpus_have_elf_hwcap(caps) && !caps->matches(caps, SCOPE_LOCAL_CPU)) {
+		if (cpus_have_elf_hwcap(caps) && !caps->matches(caps, SCOPE_LOCAL_CPU, NULL)) {
 			pr_crit("CPU%d: missing HWCAP: %s\n",
 					smp_processor_id(), caps->desc);
 			cpu_die_early();
@@ -3450,7 +3465,7 @@ bool this_cpu_has_cap(unsigned int n)
 		const struct arm64_cpu_capabilities *cap = cpucap_ptrs[n];
 
 		if (cap)
-			return cap->matches(cap, SCOPE_LOCAL_CPU);
+			return cap->matches(cap, SCOPE_LOCAL_CPU, NULL);
 	}
 
 	return false;
@@ -3468,7 +3483,7 @@ static bool __maybe_unused __system_matches_cap(unsigned int n)
 		const struct arm64_cpu_capabilities *cap = cpucap_ptrs[n];
 
 		if (cap)
-			return cap->matches(cap, SCOPE_SYSTEM);
+			return cap->matches(cap, SCOPE_SYSTEM, NULL);
 	}
 	return false;
 }

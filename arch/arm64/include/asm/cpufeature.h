@@ -335,7 +335,8 @@ struct arm64_cpu_capabilities {
 	const char *desc;
 	u16 capability;
 	u16 type;
-	bool (*matches)(const struct arm64_cpu_capabilities *caps, int scope);
+	bool (*matches)(const struct arm64_cpu_capabilities *caps, int scope,
+			void *target);
 	/*
 	 * Take the appropriate actions to configure this capability
 	 * for this CPU. If the capability is detected by the kernel
@@ -398,12 +399,12 @@ static inline int cpucap_default_scope(const struct arm64_cpu_capabilities *cap)
  */
 static inline bool
 cpucap_multi_entry_cap_matches(const struct arm64_cpu_capabilities *entry,
-			       int scope)
+			       int scope, void *target)
 {
 	const struct arm64_cpu_capabilities *caps;
 
 	for (caps = entry->match_list; caps->matches; caps++)
-		if (caps->matches(caps, scope))
+		if (caps->matches(caps, scope, target))
 			return true;
 
 	return false;

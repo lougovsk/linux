@@ -199,7 +199,8 @@ static enum mitigation_state spectre_v2_get_cpu_fw_mitigation_state(void)
 	}
 }
 
-bool has_spectre_v2(const struct arm64_cpu_capabilities *entry, int scope)
+bool has_spectre_v2(const struct arm64_cpu_capabilities *entry, int scope,
+		    void *__unused)
 {
 	WARN_ON(scope != SCOPE_LOCAL_CPU || preemptible());
 
@@ -322,7 +323,8 @@ void spectre_v2_enable_mitigation(const struct arm64_cpu_capabilities *__unused)
  * an indirect trampoline for the hyp vectors so that guests can't read
  * VBAR_EL2 to defeat randomisation of the hypervisor VA layout.
  */
-bool has_spectre_v3a(const struct arm64_cpu_capabilities *entry, int scope)
+bool has_spectre_v3a(const struct arm64_cpu_capabilities *entry, int scope,
+		     void *target)
 {
 	static const struct midr_range spectre_v3a_unsafe_list[] = {
 		MIDR_ALL_VERSIONS(MIDR_CORTEX_A57),
@@ -508,7 +510,8 @@ static enum mitigation_state spectre_v4_get_cpu_fw_mitigation_state(void)
 	}
 }
 
-bool has_spectre_v4(const struct arm64_cpu_capabilities *cap, int scope)
+bool has_spectre_v4(const struct arm64_cpu_capabilities *cap, int scope,
+		    void *__unused)
 {
 	enum mitigation_state state;
 
@@ -955,7 +958,7 @@ static bool supports_ecbhb(int scope)
 }
 
 bool is_spectre_bhb_affected(const struct arm64_cpu_capabilities *entry,
-			     int scope)
+			     int scope, void *__unused)
 {
 	WARN_ON(scope != SCOPE_LOCAL_CPU || preemptible());
 
@@ -1005,7 +1008,7 @@ void spectre_bhb_enable_mitigation(const struct arm64_cpu_capabilities *entry)
 	enum mitigation_state fw_state, state = SPECTRE_VULNERABLE;
 	struct bp_hardening_data *data = this_cpu_ptr(&bp_hardening_data);
 
-	if (!is_spectre_bhb_affected(entry, SCOPE_LOCAL_CPU))
+	if (!is_spectre_bhb_affected(entry, SCOPE_LOCAL_CPU, NULL))
 		return;
 
 	if (arm64_get_spectre_v2_state() == SPECTRE_VULNERABLE) {
