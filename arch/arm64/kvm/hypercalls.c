@@ -116,6 +116,9 @@ static bool kvm_smccc_test_fw_bmap(struct kvm_vcpu *vcpu, u32 func_id)
 	case ARM_SMCCC_VENDOR_HYP_KVM_PTP_FUNC_ID:
 		return test_bit(KVM_REG_ARM_VENDOR_HYP_BIT_PTP,
 				&smccc_feat->vendor_hyp_bmap);
+	case ARM_SMCCC_VENDOR_HYP_KVM_MIGRN_ERRATA:
+		return test_bit(KVM_REG_ARM_VENDOR_HYP_BIT_MIGRN_ERRATA,
+				&smccc_feat->vendor_hyp_bmap);
 	default:
 		return false;
 	}
@@ -364,6 +367,23 @@ int kvm_smccc_call_handler(struct kvm_vcpu *vcpu)
 	case ARM_SMCCC_VENDOR_HYP_KVM_PTP_FUNC_ID:
 		kvm_ptp_get_time(vcpu, val);
 		break;
+	case ARM_SMCCC_VENDOR_HYP_KVM_MIGRN_ERRATA: {
+		struct migrn_target_cpu *migrn_cpu = vcpu->kvm->arch.migrn_cpu;
+		unsigned long *errata_map;
+
+		if (!migrn_cpu || (ARM64_NCAPS > (BITS_PER_LONG * 4)))
+			goto out;
+
+		errata_map = bitmap_zalloc(ARM64_NCAPS, GFP_KERNEL);
+		if (!errata_map)
+			goto out;
+		for (int i = 0; i < vcpu->kvm->arch.num_migrn_cpus; i++, migrn_cpu++)
+			arm_get_migrn_errata_map(migrn_cpu, errata_map);
+
+		bitmap_to_arr64(val, errata_map, ARM64_NCAPS);
+		bitmap_free(errata_map);
+		break;
+	}
 	case ARM_SMCCC_TRNG_VERSION:
 	case ARM_SMCCC_TRNG_FEATURES:
 	case ARM_SMCCC_TRNG_GET_UUID:
