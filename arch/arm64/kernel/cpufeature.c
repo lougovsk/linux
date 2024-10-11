@@ -85,6 +85,7 @@
 #include <asm/kvm_host.h>
 #include <asm/mmu_context.h>
 #include <asm/mte.h>
+#include <asm/paravirt.h>
 #include <asm/processor.h>
 #include <asm/smp.h>
 #include <asm/sysreg.h>
@@ -110,6 +111,8 @@ EXPORT_SYMBOL(system_cpucaps);
 static struct arm64_cpu_capabilities const __ro_after_init *cpucap_ptrs[ARM64_NCAPS];
 
 DECLARE_BITMAP(boot_cpucaps, ARM64_NCAPS);
+
+DECLARE_BITMAP(migrn_safe_errata_map, ARM64_NCAPS);
 
 bool arm64_use_ng_mappings = false;
 EXPORT_SYMBOL(arm64_use_ng_mappings);
@@ -3189,6 +3192,29 @@ void arm_get_migrn_errata_map(void *target, unsigned long *errata_map)
 	}
 }
 
+static void update_migrn_errata(void)
+{
+	int i, j;
+	const struct arm64_cpu_capabilities *caps;
+	u16 scope = ARM64_CPUCAP_LOCAL_CPU_ERRATUM;
+
+	if (pv_update_migrn_errata(migrn_safe_errata_map))
+		return;
+
+	for_each_set_bit(i, migrn_safe_errata_map, ARM64_NCAPS) {
+		for (j = 0; j < ARM64_NCAPS; j++) {
+			caps = cpucap_ptrs[j];
+			if (!caps || !(caps->type & scope) ||
+			    caps->migration_safe_cap != i ||
+			    cpus_have_cap(caps->capability))
+				continue;
+			if (caps->desc && !caps->cpus)
+				pr_info("Updated with migration errata: %s\n", caps->desc);
+			__set_bit(caps->capability, system_cpucaps);
+		}
+	}
+}
+
 static void update_cpu_capabilities(u16 scope_mask)
 {
 	int i;
@@ -3566,6 +3592,7 @@ static void __init setup_system_capabilities(void)
 	 * cpucaps.
 	 */
 	update_cpu_capabilities(SCOPE_SYSTEM);
+	update_migrn_errata();
 	enable_cpu_capabilities(SCOPE_ALL & ~SCOPE_BOOT_CPU);
 	apply_alternatives_all();
 

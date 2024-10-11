@@ -23,6 +23,7 @@
 #include <asm/paravirt.h>
 #include <asm/pvclock-abi.h>
 #include <asm/smp_plat.h>
+#include <asm/hypervisor.h>
 
 struct static_key paravirt_steal_enabled;
 struct static_key paravirt_steal_rq_enabled;
@@ -151,6 +152,23 @@ static bool __init has_pv_steal_clock(void)
 			     ARM_SMCCC_HV_PV_TIME_ST, &res);
 
 	return (res.a0 == SMCCC_RET_SUCCESS);
+}
+
+int __init pv_update_migrn_errata(unsigned long *errata_map)
+{
+	int ret;
+	struct arm_smccc_res res;
+
+	ret = kvm_arm_hyp_service_available(ARM_SMCCC_KVM_FUNC_MIGRN_ERRATA);
+	if (ret <= 0)
+		return -EOPNOTSUPP;
+
+	arm_smccc_1_1_invoke(ARM_SMCCC_VENDOR_HYP_KVM_MIGRN_ERRATA, &res);
+	if (res.a0 == SMCCC_RET_NOT_SUPPORTED)
+		return -EINVAL;
+
+	bitmap_from_arr64(errata_map, &res, ARM64_NCAPS);
+	return 0;
 }
 
 int __init pv_time_init(void)

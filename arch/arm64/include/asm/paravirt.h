@@ -19,10 +19,14 @@ static inline u64 paravirt_steal_clock(int cpu)
 }
 
 int __init pv_time_init(void);
+int __init pv_update_migrn_errata(unsigned long *errata_map);
 
 #else
 
 #define pv_time_init() do {} while (0)
+
+static inline int pv_update_migrn_errata(unsigned long *errata_map)
+{ return -EINVAL; }
 
 #endif // CONFIG_PARAVIRT
 
