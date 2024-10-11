@@ -12,6 +12,7 @@
 #include <asm/cpu.h>
 #include <asm/cputype.h>
 #include <asm/cpufeature.h>
+#include <asm/cpu_migrn_errata.h>
 #include <asm/kvm_asm.h>
 #include <asm/smp_plat.h>
 
@@ -515,6 +516,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.capability = ARM64_WORKAROUND_CLEAN_CACHE,
 		ERRATA_MIDR_RANGE_LIST(workaround_clean_cache),
 		.cpu_enable = cpu_enable_cache_maint_trap,
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_CLEAN_CACHE,
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_832075
@@ -525,6 +527,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		ERRATA_MIDR_RANGE(MIDR_CORTEX_A57,
 				  0, 0,
 				  1, 2),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_DEVICE_LOAD_ACQUIRE,
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_834220
@@ -535,6 +538,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		ERRATA_MIDR_RANGE(MIDR_CORTEX_A57,
 				  0, 0,
 				  1, 2),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_834220,
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_843419
@@ -544,6 +548,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.type = ARM64_CPUCAP_LOCAL_CPU_ERRATUM,
 		.matches = cpucap_multi_entry_cap_matches,
 		.match_list = erratum_843419_list,
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_843419,
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_845719
@@ -551,6 +556,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.desc = "ARM erratum 845719",
 		.capability = ARM64_WORKAROUND_845719,
 		ERRATA_MIDR_RANGE_LIST(erratum_845719_list),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_845719,
 	},
 #endif
 #ifdef CONFIG_CAVIUM_ERRATUM_23154
@@ -559,6 +565,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.capability = ARM64_WORKAROUND_CAVIUM_23154,
 		.type = ARM64_CPUCAP_LOCAL_CPU_ERRATUM,
 		ERRATA_MIDR_RANGE_LIST(cavium_erratum_23154_cpus),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_CAVIUM_23154,
 	},
 #endif
 #ifdef CONFIG_CAVIUM_ERRATUM_27456
@@ -566,6 +573,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.desc = "Cavium erratum 27456",
 		.capability = ARM64_WORKAROUND_CAVIUM_27456,
 		ERRATA_MIDR_RANGE_LIST(cavium_erratum_27456_cpus),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_CAVIUM_27456,
 	},
 #endif
 #ifdef CONFIG_CAVIUM_ERRATUM_30115
@@ -573,6 +581,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.desc = "Cavium erratum 30115",
 		.capability = ARM64_WORKAROUND_CAVIUM_30115,
 		ERRATA_MIDR_RANGE_LIST(cavium_erratum_30115_cpus),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_CAVIUM_30115,
 	},
 #endif
 	{
@@ -589,6 +598,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.type = ARM64_CPUCAP_LOCAL_CPU_ERRATUM,
 		.matches = cpucap_multi_entry_cap_matches,
 		.match_list = qcom_erratum_1003_list,
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_QCOM_FALKOR_E1003,
 	},
 #endif
 #ifdef CONFIG_ARM64_WORKAROUND_REPEAT_TLBI
@@ -598,6 +608,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.type = ARM64_CPUCAP_LOCAL_CPU_ERRATUM,
 		.matches = cpucap_multi_entry_cap_matches,
 		.match_list = arm64_repeat_tlbi_list,
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_REPEAT_TLBI,
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_858921
@@ -606,6 +617,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.desc = "ARM erratum 858921",
 		.capability = ARM64_WORKAROUND_858921,
 		ERRATA_MIDR_ALL_VERSIONS(MIDR_CORTEX_A73),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_858921,
 	},
 #endif
 	{
@@ -650,6 +662,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		 * in at any point in time. Wonderful.
 		 */
 		.type = ARM64_CPUCAP_WEAK_LOCAL_CPU_FEATURE,
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_1418040,
 	},
 #endif
 #ifdef CONFIG_ARM64_WORKAROUND_SPECULATIVE_AT
@@ -657,6 +670,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.desc = "ARM errata 1165522, 1319367, or 1530923",
 		.capability = ARM64_WORKAROUND_SPECULATIVE_AT,
 		ERRATA_MIDR_RANGE_LIST(erratum_speculative_at_list),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_SPECULATIVE_AT,
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_1463225
@@ -666,6 +680,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.type = ARM64_CPUCAP_LOCAL_CPU_ERRATUM,
 		.matches = has_cortex_a76_erratum_1463225,
 		.midr_range_list = erratum_1463225,
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_1463225,
 	},
 #endif
 #ifdef CONFIG_CAVIUM_TX2_ERRATUM_219
@@ -674,11 +689,13 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.capability = ARM64_WORKAROUND_CAVIUM_TX2_219_TVM,
 		ERRATA_MIDR_RANGE_LIST(tx2_family_cpus),
 		.matches = needs_tx2_tvm_workaround,
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_CAVIUM_TX2_219_TVM,
 	},
 	{
 		.desc = "Cavium ThunderX2 erratum 219 (PRFM removal)",
 		.capability = ARM64_WORKAROUND_CAVIUM_TX2_219_PRFM,
 		ERRATA_MIDR_RANGE_LIST(tx2_family_cpus),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_CAVIUM_TX2_219_PRFM,
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_1542419
@@ -699,6 +716,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		ERRATA_MIDR_RANGE(MIDR_CORTEX_A77,
 				  0, 0,
 				  1, 0),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_1508412,
 	},
 #endif
 #ifdef CONFIG_NVIDIA_CARMEL_CNP_ERRATUM
@@ -707,6 +725,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.desc = "NVIDIA Carmel CNP erratum",
 		.capability = ARM64_WORKAROUND_NVIDIA_CARMEL_CNP,
 		ERRATA_MIDR_ALL_VERSIONS(MIDR_NVIDIA_CARMEL),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_NVIDIA_CARMEL_CNP,
 	},
 #endif
 #ifdef CONFIG_ARM64_WORKAROUND_TRBE_OVERWRITE_FILL_MODE
@@ -720,6 +739,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.capability = ARM64_WORKAROUND_TRBE_OVERWRITE_FILL_MODE,
 		.type = ARM64_CPUCAP_WEAK_LOCAL_CPU_FEATURE,
 		CAP_MIDR_RANGE_LIST(trbe_overwrite_fill_mode_cpus),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_TRBE_OVERWRITE_FILL_MODE,
 	},
 #endif
 #ifdef CONFIG_ARM64_WORKAROUND_TSB_FLUSH_FAILURE
@@ -727,6 +747,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.desc = "ARM erratum 2067961 or 2054223",
 		.capability = ARM64_WORKAROUND_TSB_FLUSH_FAILURE,
 		ERRATA_MIDR_RANGE_LIST(tsb_flush_fail_cpus),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_TSB_FLUSH_FAILURE,
 	},
 #endif
 #ifdef CONFIG_ARM64_WORKAROUND_TRBE_WRITE_OUT_OF_RANGE
@@ -735,12 +756,14 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.capability = ARM64_WORKAROUND_TRBE_WRITE_OUT_OF_RANGE,
 		.type = ARM64_CPUCAP_WEAK_LOCAL_CPU_FEATURE,
 		CAP_MIDR_RANGE_LIST(trbe_write_out_of_range_cpus),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_TRBE_WRITE_OUT_OF_RANGE,
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_2645198
 	{
 		.desc = "ARM erratum 2645198",
 		.capability = ARM64_WORKAROUND_2645198,
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_2645198,
 		ERRATA_MIDR_ALL_VERSIONS(MIDR_CORTEX_A715)
 	},
 #endif
@@ -749,12 +772,14 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.desc = "ARM erratum 2077057",
 		.capability = ARM64_WORKAROUND_2077057,
 		ERRATA_MIDR_REV_RANGE(MIDR_CORTEX_A510, 0, 0, 2),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_2077057,
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_2064142
 	{
 		.desc = "ARM erratum 2064142",
 		.capability = ARM64_WORKAROUND_2064142,
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_2064142,
 
 		/* Cortex-A510 r0p0 - r0p2 */
 		ERRATA_MIDR_REV_RANGE(MIDR_CORTEX_A510, 0, 0, 2)
@@ -765,6 +790,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.desc = "ARM erratum 2457168",
 		.capability = ARM64_WORKAROUND_2457168,
 		.type = ARM64_CPUCAP_WEAK_LOCAL_CPU_FEATURE,
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_2457168,
 
 		/* Cortex-A510 r0p0-r1p1 */
 		CAP_MIDR_RANGE(MIDR_CORTEX_A510, 0, 0, 1, 1)
@@ -774,7 +800,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 	{
 		.desc = "ARM erratum 2038923",
 		.capability = ARM64_WORKAROUND_2038923,
-
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_2038923,
 		/* Cortex-A510 r0p0 - r0p2 */
 		ERRATA_MIDR_REV_RANGE(MIDR_CORTEX_A510, 0, 0, 2)
 	},
@@ -783,6 +809,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 	{
 		.desc = "ARM erratum 1902691",
 		.capability = ARM64_WORKAROUND_1902691,
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_1902691,
 
 		/* Cortex-A510 r0p0 - r0p1 */
 		ERRATA_MIDR_REV_RANGE(MIDR_CORTEX_A510, 0, 0, 1)
@@ -794,6 +821,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.capability = ARM64_WORKAROUND_1742098,
 		CAP_MIDR_RANGE_LIST(broken_aarch32_aes),
 		.type = ARM64_CPUCAP_LOCAL_CPU_ERRATUM,
+		.migration_safe_cap = ARM64_MIGRN_CPUCAP_LOCAL_CPU_ERRATUM,
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_2658417
@@ -803,6 +831,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		/* Cortex-A510 r0p0 - r1p1 */
 		ERRATA_MIDR_RANGE(MIDR_CORTEX_A510, 0, 0, 1, 1),
 		MIDR_FIXED(MIDR_CPU_VAR_REV(1,1), BIT(25)),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_2658417,
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_3194386
@@ -810,6 +839,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.desc = "SSBS not fully self-synchronizing",
 		.capability = ARM64_WORKAROUND_SPECULATIVE_SSBS,
 		ERRATA_MIDR_RANGE_LIST(erratum_spec_ssbs_list),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_SPECULATIVE_SSBS,
 	},
 #endif
 #ifdef CONFIG_ARM64_WORKAROUND_SPECULATIVE_UNPRIV_LOAD
@@ -818,6 +848,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.capability = ARM64_WORKAROUND_SPECULATIVE_UNPRIV_LOAD,
 		/* Cortex-A520 r0p0 - r0p1 */
 		ERRATA_MIDR_RANGE_LIST(erratum_spec_unpriv_load_list),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_SPECULATIVE_UNPRIV_LOAD,
 	},
 #endif
 #ifdef CONFIG_AMPERE_ERRATUM_AC03_CPU_38
@@ -825,6 +856,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.desc = "AmpereOne erratum AC03_CPU_38",
 		.capability = ARM64_WORKAROUND_AMPERE_AC03_CPU_38,
 		ERRATA_MIDR_RANGE_LIST(erratum_ac03_cpu_38_list),
+		.migration_safe_cap = ARM64_MIGRN_WORKAROUND_AMPERE_AC03_CPU_38,
 	},
 #endif
 	{
