@@ -326,7 +326,7 @@ struct kvm_arch {
 	unsigned long flags;
 
 	/* VM-wide vCPU feature set */
-	DECLARE_BITMAP(vcpu_features, KVM_VCPU_MAX_FEATURES);
+	DECLARE_BITMAP(vcpu_features, KVM_ARM_VCPU_MAX_FEATURES);
 
 	/* MPIDR to vcpu index mapping, optional */
 	struct kvm_mpidr_data *mpidr_data;

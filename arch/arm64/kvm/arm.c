@@ -211,7 +211,7 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 
 	kvm_arm_init_hypercalls(kvm);
 
-	bitmap_zero(kvm->arch.vcpu_features, KVM_VCPU_MAX_FEATURES);
+	bitmap_zero(kvm->arch.vcpu_features, KVM_ARM_VCPU_MAX_FEATURES);
 
 	return 0;
 
@@ -1407,7 +1407,7 @@ int kvm_vm_ioctl_irq_line(struct kvm *kvm, struct kvm_irq_level *irq_level,
 
 static unsigned long system_supported_vcpu_features(void)
 {
-	unsigned long features = KVM_VCPU_VALID_FEATURES;
+	unsigned long features = KVM_ARM_VCPU_VALID_FEATURES;
 
 	if (!cpus_have_final_cap(ARM64_HAS_32BIT_EL1))
 		clear_bit(KVM_ARM_VCPU_EL1_32BIT, &features);
@@ -1435,7 +1435,7 @@ static int kvm_vcpu_init_check_features(struct kvm_vcpu *vcpu,
 	unsigned long features = init->features[0];
 	int i;
 
-	if (features & ~KVM_VCPU_VALID_FEATURES)
+	if (features & ~KVM_ARM_VCPU_VALID_FEATURES)
 		return -ENOENT;
 
 	for (i = 1; i < ARRAY_SIZE(init->features); i++) {
@@ -1474,7 +1474,7 @@ static bool kvm_vcpu_init_changed(struct kvm_vcpu *vcpu,
 	unsigned long features = init->features[0];
 
 	return !bitmap_equal(vcpu->kvm->arch.vcpu_features, &features,
-			     KVM_VCPU_MAX_FEATURES);
+			     KVM_ARM_VCPU_MAX_FEATURES);
 }
 
 static int kvm_setup_vcpu(struct kvm_vcpu *vcpu)
@@ -1509,7 +1509,7 @@ static int __kvm_vcpu_set_target(struct kvm_vcpu *vcpu,
 	    kvm_vcpu_init_changed(vcpu, init))
 		goto out_unlock;
 
-	bitmap_copy(kvm->arch.vcpu_features, &features, KVM_VCPU_MAX_FEATURES);
+	bitmap_copy(kvm->arch.vcpu_features, &features, KVM_ARM_VCPU_MAX_FEATURES);
 
 	ret = kvm_setup_vcpu(vcpu);
 	if (ret)

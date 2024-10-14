@@ -100,17 +100,20 @@ struct kvm_regs {
 #define KVM_VGIC_V3_REDIST_SIZE		(2 * SZ_64K)
 #define KVM_VGIC_V3_ITS_SIZE		(2 * SZ_64K)
 
-#define KVM_ARM_VCPU_POWER_OFF		0 /* CPU is started in OFF state */
-#define KVM_ARM_VCPU_EL1_32BIT		1 /* CPU running a 32bit VM */
-#define KVM_ARM_VCPU_PSCI_0_2		2 /* CPU uses PSCI v0.2 */
-#define KVM_ARM_VCPU_PMU_V3		3 /* Support guest PMUv3 */
-#define KVM_ARM_VCPU_SVE		4 /* enable SVE for this CPU */
-#define KVM_ARM_VCPU_PTRAUTH_ADDRESS	5 /* VCPU uses address authentication */
-#define KVM_ARM_VCPU_PTRAUTH_GENERIC	6 /* VCPU uses generic authentication */
-#define KVM_ARM_VCPU_HAS_EL2		7 /* Support nested virtualization */
+enum kvm_arm_vcpu_features {
+	KVM_ARM_VCPU_POWER_OFF = 0,	/* CPU is started in OFF state */
+	KVM_ARM_VCPU_EL1_32BIT,		/* CPU running a 32bit VM */
+	KVM_ARM_VCPU_PSCI_0_2,		/* CPU uses PSCI v0.2 */
+	KVM_ARM_VCPU_PMU_V3,		/* Support guest PMUv3 */
+	KVM_ARM_VCPU_SVE,		/* enable SVE for this CPU */
+	KVM_ARM_VCPU_PTRAUTH_ADDRESS,	/* VCPU uses address authentication */
+	KVM_ARM_VCPU_PTRAUTH_GENERIC,	/* VCPU uses generic authentication */
+	KVM_ARM_VCPU_HAS_EL2,		/* Support nested virtualization */
 
-#define KVM_VCPU_MAX_FEATURES 8
-#define KVM_VCPU_VALID_FEATURES	(BIT(KVM_VCPU_MAX_FEATURES) - 1)
+	KVM_ARM_VCPU_MAX_FEATURES,	/* Must be last */
+};
+
+#define KVM_ARM_VCPU_VALID_FEATURES	(BIT(KVM_ARM_VCPU_MAX_FEATURES) - 1)
 
 struct kvm_vcpu_init {
 	__u32 target;
