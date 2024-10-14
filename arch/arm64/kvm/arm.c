@@ -117,6 +117,8 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 	if (kvm_vm_is_protected(kvm) && !pkvm_ext_allowed(kvm, cap->cap))
 		return -EINVAL;
 
+	BUILD_BUG_ON(sizeof(kvm->arch.flags) * __CHAR_BIT__ <= KVM_ARCH_FLAG_MAX);
+
 	switch (cap->cap) {
 	case KVM_CAP_ARM_NISV_TO_USER:
 		r = 0;

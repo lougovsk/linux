@@ -268,6 +268,35 @@ enum fgt_group_id {
 	__NR_FGT_GROUP_IDS__
 };
 
+enum kvm_arch_flags {
+	/*
+	 * If we encounter a data abort without valid instruction syndrome
+	 * information, report this to user space.  User space can (and
+	 * should) opt in to this feature if KVM_CAP_ARM_NISV_TO_USER is
+	 * supported.
+	 */
+	KVM_ARCH_FLAG_RETURN_NISV_IO_ABORT_TO_USER = 0,
+	/* Memory Tagging Extension enabled for the guest */
+	KVM_ARCH_FLAG_MTE_ENABLED,
+	/* At least one vCPU has ran in the VM */
+	KVM_ARCH_FLAG_HAS_RAN_ONCE,
+	/* The vCPU feature set for the VM is configured */
+	KVM_ARCH_FLAG_VCPU_FEATURES_CONFIGURED,
+	/* PSCI SYSTEM_SUSPEND enabled for the guest */
+	KVM_ARCH_FLAG_SYSTEM_SUSPEND_ENABLED,
+	/* VM counter offset */
+	KVM_ARCH_FLAG_VM_COUNTER_OFFSET,
+	/* Timer PPIs made immutable */
+	KVM_ARCH_FLAG_TIMER_PPIS_IMMUTABLE,
+	/* Initial ID reg values loaded */
+	KVM_ARCH_FLAG_ID_REGS_INITIALIZED,
+	/* Fine-Grained UNDEF initialised */
+	KVM_ARCH_FLAG_FGU_INITIALIZED,
+
+	/* Must be last */
+	KVM_ARCH_FLAG_MAX
+};
+
 struct kvm_arch {
 	struct kvm_s2_mmu mmu;
 
@@ -300,29 +329,7 @@ struct kvm_arch {
 	/* Protects VM-scoped configuration data */
 	struct mutex config_lock;
 
-	/*
-	 * If we encounter a data abort without valid instruction syndrome
-	 * information, report this to user space.  User space can (and
-	 * should) opt in to this feature if KVM_CAP_ARM_NISV_TO_USER is
-	 * supported.
-	 */
-#define KVM_ARCH_FLAG_RETURN_NISV_IO_ABORT_TO_USER	0
-	/* Memory Tagging Extension enabled for the guest */
-#define KVM_ARCH_FLAG_MTE_ENABLED			1
-	/* At least one vCPU has ran in the VM */
-#define KVM_ARCH_FLAG_HAS_RAN_ONCE			2
-	/* The vCPU feature set for the VM is configured */
-#define KVM_ARCH_FLAG_VCPU_FEATURES_CONFIGURED		3
-	/* PSCI SYSTEM_SUSPEND enabled for the guest */
-#define KVM_ARCH_FLAG_SYSTEM_SUSPEND_ENABLED		4
-	/* VM counter offset */
-#define KVM_ARCH_FLAG_VM_COUNTER_OFFSET			5
-	/* Timer PPIs made immutable */
-#define KVM_ARCH_FLAG_TIMER_PPIS_IMMUTABLE		6
-	/* Initial ID reg values loaded */
-#define KVM_ARCH_FLAG_ID_REGS_INITIALIZED		7
-	/* Fine-Grained UNDEF initialised */
-#define KVM_ARCH_FLAG_FGU_INITIALIZED			8
+	/* Bitmap of the set kvm_arch_flags */
 	unsigned long flags;
 
 	/* VM-wide vCPU feature set */
