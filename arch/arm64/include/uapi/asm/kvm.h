@@ -109,6 +109,9 @@ struct kvm_regs {
 #define KVM_ARM_VCPU_PTRAUTH_GENERIC	6 /* VCPU uses generic authentication */
 #define KVM_ARM_VCPU_HAS_EL2		7 /* Support nested virtualization */
 
+#define KVM_VCPU_MAX_FEATURES 8
+#define KVM_VCPU_VALID_FEATURES	(BIT(KVM_VCPU_MAX_FEATURES) - 1)
+
 struct kvm_vcpu_init {
 	__u32 target;
 	__u32 features[7];
