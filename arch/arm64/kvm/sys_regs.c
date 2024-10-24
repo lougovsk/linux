@@ -4135,7 +4135,7 @@ static int idregs_debug_show(struct seq_file *s, void *v)
 
 	desc = idregs_debug_find(kvm, kvm->arch.idreg_debugfs_iter);
 
-	if (!desc->name)
+	if (!desc || !desc->name)
 		return 0;
 
 	seq_printf(s, "%20s:\t%016llx\n",
