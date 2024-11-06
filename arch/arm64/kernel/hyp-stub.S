@@ -117,6 +117,8 @@ SYM_CODE_START_LOCAL(__finalise_el2)
 	bic	x0, x0, #(MDCR_EL2_E2PB_MASK << MDCR_EL2_E2PB_SHIFT)
 	bic	x0, x0, #(MDCR_EL2_E2TB_MASK << MDCR_EL2_E2TB_SHIFT)
 	msr	mdcr_el2, x0
+	// Disable profiling when running a virtual machine
+	msr_s	SYS_PMSCR_EL12, xzr
 
 	// Transfer the MM state from EL1 to EL2
 	mrs_s	x0, SYS_TCR_EL12
