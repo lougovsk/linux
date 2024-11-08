@@ -1340,8 +1340,29 @@ void kvm_handle_debug_access(struct kvm_vcpu *vcpu);
 #define kvm_vcpu_os_lock_enabled(vcpu)		\
 	(!!(__vcpu_sys_reg(vcpu, OSLSR_EL1) & OSLSR_EL1_OSLK))
 
+#define kvm_debug_regs_in_use(vcpu)		\
+	((vcpu)->arch.debug_owner != VCPU_DEBUG_FREE)
 #define kvm_host_owns_debug_regs(vcpu)		\
 	((vcpu)->arch.debug_owner == VCPU_DEBUG_HOST_OWNED)
+
+#define vcpu_debug_regs(vcpu)					\
+({								\
+	struct kvm_guest_debug_arch *__d;			\
+								\
+	switch ((vcpu)->arch.debug_owner) {			\
+	case VCPU_DEBUG_FREE:					\
+		WARN_ON_ONCE(1);				\
+		fallthrough;					\
+	case VCPU_DEBUG_GUEST_OWNED:				\
+		__d = &(vcpu)->arch.vcpu_debug_state;		\
+		break;						\
+	case VCPU_DEBUG_HOST_OWNED:				\
+		__d = &(vcpu)->arch.external_debug_state;	\
+		break;						\
+	}							\
+								\
+	__d;							\
+})
 
 int kvm_arm_vcpu_arch_set_attr(struct kvm_vcpu *vcpu,
 			       struct kvm_device_attr *attr);
