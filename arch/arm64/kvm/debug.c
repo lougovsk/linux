@@ -313,3 +313,26 @@ void kvm_init_host_debug_data(void)
 	    !(read_sysreg_s(SYS_TRBIDR_EL1) & TRBIDR_EL1_P))
 		host_data_set_flag(HAS_TRBE);
 }
+
+void kvm_vcpu_load_debug(struct kvm_vcpu *vcpu)
+{
+	u64 mdscr;
+
+	/* Must be called before kvm_vcpu_load_vhe() */
+	KVM_BUG_ON(vcpu_get_flag(vcpu, SYSREGS_ON_CPU), vcpu->kvm);
+
+	if (vcpu->guest_debug || kvm_vcpu_os_lock_enabled(vcpu)) {
+		vcpu->arch.debug_owner = VCPU_DEBUG_HOST_OWNED;
+	} else {
+		mdscr = vcpu_read_sys_reg(vcpu, MDSCR_EL1);
+
+		/*
+		 * Eagerly restore the debug state if the debugger is actively
+		 * in use
+		 */
+		if (mdscr & (MDSCR_EL1_KDE | MDSCR_EL1_MDE))
+			vcpu->arch.debug_owner = VCPU_DEBUG_GUEST_OWNED;
+		else
+			vcpu->arch.debug_owner = VCPU_DEBUG_FREE;
+	}
+}
