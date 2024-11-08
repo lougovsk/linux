@@ -336,3 +336,12 @@ void kvm_vcpu_load_debug(struct kvm_vcpu *vcpu)
 			vcpu->arch.debug_owner = VCPU_DEBUG_FREE;
 	}
 }
+
+void kvm_handle_debug_access(struct kvm_vcpu *vcpu)
+{
+	if (kvm_host_owns_debug_regs(vcpu))
+		return;
+
+	WARN_ON_ONCE(vcpu->arch.debug_owner == VCPU_DEBUG_GUEST_OWNED);
+	vcpu->arch.debug_owner = VCPU_DEBUG_GUEST_OWNED;
+}
