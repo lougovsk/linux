@@ -742,6 +742,7 @@ struct kvm_vcpu_arch {
 	 */
 	struct kvm_guest_debug_arch vcpu_debug_state;
 	struct kvm_guest_debug_arch external_debug_state;
+	u64 external_mdscr_el1;
 
 	enum {
 		VCPU_DEBUG_FREE,
@@ -762,7 +763,6 @@ struct kvm_vcpu_arch {
 	 * are using guest debug.
 	 */
 	struct {
-		u32	mdscr_el1;
 		bool	pstate_ss;
 	} guest_debug_preserved;
 

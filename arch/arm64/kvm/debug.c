@@ -32,19 +32,12 @@
  */
 static void save_guest_debug_regs(struct kvm_vcpu *vcpu)
 {
-	u64 val = vcpu_read_sys_reg(vcpu, MDSCR_EL1);
-
-	vcpu->arch.guest_debug_preserved.mdscr_el1 = val;
 	vcpu->arch.guest_debug_preserved.pstate_ss =
 					(*vcpu_cpsr(vcpu) & DBG_SPSR_SS);
 }
 
 static void restore_guest_debug_regs(struct kvm_vcpu *vcpu)
 {
-	u64 val = vcpu->arch.guest_debug_preserved.mdscr_el1;
-
-	vcpu_write_sys_reg(vcpu, val, MDSCR_EL1);
-
 	if (vcpu->arch.guest_debug_preserved.pstate_ss)
 		*vcpu_cpsr(vcpu) |= DBG_SPSR_SS;
 	else
@@ -149,36 +142,6 @@ void kvm_arm_setup_debug(struct kvm_vcpu *vcpu)
 				*vcpu_cpsr(vcpu) |= DBG_SPSR_SS;
 			else
 				*vcpu_cpsr(vcpu) &= ~DBG_SPSR_SS;
-
-			mdscr = vcpu_read_sys_reg(vcpu, MDSCR_EL1);
-			mdscr |= DBG_MDSCR_SS;
-			vcpu_write_sys_reg(vcpu, mdscr, MDSCR_EL1);
-		} else {
-			mdscr = vcpu_read_sys_reg(vcpu, MDSCR_EL1);
-			mdscr &= ~DBG_MDSCR_SS;
-			vcpu_write_sys_reg(vcpu, mdscr, MDSCR_EL1);
-		}
-
-		/*
-		 * Enable breakpoints and watchpoints if userspace wants them.
-		 */
-		if (vcpu->guest_debug & KVM_GUESTDBG_USE_HW) {
-			mdscr = vcpu_read_sys_reg(vcpu, MDSCR_EL1);
-			mdscr |= DBG_MDSCR_MDE;
-			vcpu_write_sys_reg(vcpu, mdscr, MDSCR_EL1);
-
-		/*
-		 * The OS Lock blocks debug exceptions in all ELs when it is
-		 * enabled. If the guest has enabled the OS Lock, constrain its
-		 * effects to the guest. Emulate the behavior by clearing
-		 * MDSCR_EL1.MDE. In so doing, we ensure that host debug
-		 * exceptions are unaffected by guest configuration of the OS
-		 * Lock.
-		 */
-		} else if (kvm_vcpu_os_lock_enabled(vcpu)) {
-			mdscr = vcpu_read_sys_reg(vcpu, MDSCR_EL1);
-			mdscr &= ~DBG_MDSCR_MDE;
-			vcpu_write_sys_reg(vcpu, mdscr, MDSCR_EL1);
 		}
 	}
 }
@@ -232,6 +195,14 @@ void kvm_vcpu_load_debug(struct kvm_vcpu *vcpu)
 	KVM_BUG_ON(vcpu_get_flag(vcpu, SYSREGS_ON_CPU), vcpu->kvm);
 
 	if (vcpu->guest_debug || kvm_vcpu_os_lock_enabled(vcpu)) {
+		mdscr = MDSCR_EL1_TDCC;
+
+		if (vcpu->guest_debug & KVM_GUESTDBG_SINGLESTEP)
+			mdscr |= MDSCR_EL1_SS;
+		if (vcpu->guest_debug & KVM_GUESTDBG_USE_HW)
+			mdscr |= MDSCR_EL1_MDE;
+
+		vcpu->arch.external_mdscr_el1 = mdscr;
 		vcpu->arch.debug_owner = VCPU_DEBUG_HOST_OWNED;
 	} else {
 		mdscr = vcpu_read_sys_reg(vcpu, MDSCR_EL1);
