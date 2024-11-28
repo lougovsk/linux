@@ -555,7 +555,7 @@ static struct vgic_irq *vgic_its_check_cache(struct kvm *kvm, phys_addr_t db,
 	return irq;
 }
 
-static void vgic_its_cache_translation(struct kvm *kvm, struct vgic_its *its,
+static int vgic_its_cache_translation(struct kvm *kvm, struct vgic_its *its,
 				       u32 devid, u32 eventid,
 				       struct vgic_irq *irq)
 {
@@ -564,7 +564,11 @@ static void vgic_its_cache_translation(struct kvm *kvm, struct vgic_its *its,
 
 	/* Do not cache a directly injected interrupt */
 	if (irq->hw)
-		return;
+		return 0;
+
+	old = xa_store(&its->translation_cache, cache_key, irq, GFP_KERNEL_ACCOUNT);
+	if (xa_is_err(old))
+		return xa_err(old);
 
 	/*
 	 * The irq refcount is guaranteed to be nonzero while holding the
@@ -578,9 +582,10 @@ static void vgic_its_cache_translation(struct kvm *kvm, struct vgic_its *its,
 	 * translation behind our back, ensure we don't leak a
 	 * reference if that is the case.
 	 */
-	old = xa_store(&its->translation_cache, cache_key, irq, GFP_KERNEL_ACCOUNT);
 	if (old)
 		vgic_put_irq(kvm, old);
+
+	return 0;
 }
 
 static void vgic_its_invalidate_cache(struct vgic_its *its)
@@ -618,6 +623,7 @@ int vgic_its_resolve_lpi(struct kvm *kvm, struct vgic_its *its,
 {
 	struct kvm_vcpu *vcpu;
 	struct its_ite *ite;
+	int ret;
 
 	if (!its->enabled)
 		return -EBUSY;
@@ -633,7 +639,9 @@ int vgic_its_resolve_lpi(struct kvm *kvm, struct vgic_its *its,
 	if (!vgic_lpis_enabled(vcpu))
 		return -EBUSY;
 
-	vgic_its_cache_translation(kvm, its, devid, eventid, ite->irq);
+	ret = vgic_its_cache_translation(kvm, its, devid, eventid, ite->irq);
+	if (ret)
+		return ret;
 
 	*irq = ite->irq;
 	return 0;
