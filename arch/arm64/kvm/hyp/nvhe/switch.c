@@ -44,7 +44,7 @@ static void __activate_cptr_traps(struct kvm_vcpu *vcpu)
 
 		if (guest_owns_fp_regs()) {
 			val |= CPACR_ELx_FPEN;
-			if (vcpu_has_sve(vcpu))
+			if (kvm_has_sve(kern_hyp_va(vcpu->kvm)))
 				val |= CPACR_ELx_ZEN;
 		}
 	} else {
@@ -56,7 +56,7 @@ static void __activate_cptr_traps(struct kvm_vcpu *vcpu)
 		 */
 		val |= CPTR_EL2_TSM;
 
-		if (!vcpu_has_sve(vcpu) || !guest_owns_fp_regs())
+		if (!kvm_has_sve(kern_hyp_va(vcpu->kvm)) || !guest_owns_fp_regs())
 			val |= CPTR_EL2_TZ;
 
 		if (!guest_owns_fp_regs())
@@ -119,7 +119,7 @@ static void __deactivate_traps(struct kvm_vcpu *vcpu)
 
 	write_sysreg(this_cpu_ptr(&kvm_init_params)->hcr_el2, hcr_el2);
 
-	kvm_reset_cptr_el2(vcpu);
+	kvm_reset_cptr_el2(kern_hyp_va(vcpu->kvm));
 	write_sysreg(__kvm_hyp_host_vector, vbar_el2);
 }
 
@@ -203,7 +203,7 @@ static void kvm_hyp_save_fpsimd_host(struct kvm_vcpu *vcpu)
 		__hyp_sve_save_host();
 
 		/* Re-enable SVE traps if not supported for the guest vcpu. */
-		if (!vcpu_has_sve(vcpu))
+		if (!kvm_has_sve(kern_hyp_va(vcpu->kvm)))
 			cpacr_clear_set(CPACR_ELx_ZEN, 0);
 
 	} else {

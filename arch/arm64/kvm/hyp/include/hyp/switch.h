@@ -391,7 +391,7 @@ static bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 	if (!system_supports_fpsimd())
 		return false;
 
-	sve_guest = vcpu_has_sve(vcpu);
+	sve_guest = kvm_has_sve(kern_hyp_va(vcpu->kvm));
 	esr_ec = kvm_vcpu_trap_get_class(vcpu);
 
 	/* Only handle traps the vCPU can support here: */

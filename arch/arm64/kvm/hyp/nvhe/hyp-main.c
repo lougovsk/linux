@@ -71,7 +71,7 @@ static void fpsimd_sve_sync(struct kvm_vcpu *vcpu)
 	cpacr_clear_set(0, CPACR_ELx_FPEN | CPACR_ELx_ZEN);
 	isb();
 
-	if (vcpu_has_sve(vcpu))
+	if (kvm_has_sve(kern_hyp_va(vcpu->kvm)))
 		__hyp_sve_save_guest(vcpu);
 	else
 		__fpsimd_save_state(&vcpu->arch.ctxt.fp_regs);
