@@ -103,7 +103,7 @@ int hw_breakpoint_slots(int type)
 	WRITE_WB_REG_CASE(OFF, 14, REG, VAL);	\
 	WRITE_WB_REG_CASE(OFF, 15, REG, VAL)
 
-static u64 read_wb_reg(int reg, int n)
+static u64 __read_wb_reg(int reg, int n)
 {
 	u64 val = 0;
 
@@ -118,9 +118,31 @@ static u64 read_wb_reg(int reg, int n)
 
 	return val;
 }
+
+static u64 read_wb_reg(int reg, int n)
+{
+	unsigned long flags;
+	u64 val;
+
+	if (!is_debug_v8p9_enabled())
+		return __read_wb_reg(reg, n);
+
+	/*
+	 * Bank selection in MDSELR_EL1, followed by an indexed read from
+	 * breakpoint (or watchpoint) registers cannot be interrupted, as
+	 * that might cause misread from the wrong targets instead. Hence
+	 * this requires mutual exclusion.
+	 */
+	local_irq_save(flags);
+	write_sysreg_s(SYS_FIELD_PREP(MDSELR_EL1, BANK, n / MAX_PER_BANK), SYS_MDSELR_EL1);
+	isb();
+	val = __read_wb_reg(reg, n % MAX_PER_BANK);
+	local_irq_restore(flags);
+	return val;
+}
 NOKPROBE_SYMBOL(read_wb_reg);
 
-static void write_wb_reg(int reg, int n, u64 val)
+static void __write_wb_reg(int reg, int n, u64 val)
 {
 	switch (reg + n) {
 	GEN_WRITE_WB_REG_CASES(AARCH64_DBG_REG_BVR, AARCH64_DBG_REG_NAME_BVR, val);
@@ -131,6 +153,26 @@ static void write_wb_reg(int reg, int n, u64 val)
 		pr_warn("attempt to write to unknown breakpoint register %d\n", n);
 	}
 	isb();
+}
+
+static void write_wb_reg(int reg, int n, u64 val)
+{
+	unsigned long flags;
+
+	if (!is_debug_v8p9_enabled())
+		return __write_wb_reg(reg, n, val);
+
+	/*
+	 * Bank selection in MDSELR_EL1, followed by an indexed read from
+	 * breakpoint (or watchpoint) registers cannot be interrupted, as
+	 * that might cause misread from the wrong targets instead. Hence
+	 * this requires mutual exclusion.
+	 */
+	local_irq_save(flags);
+	write_sysreg_s(SYS_FIELD_PREP(MDSELR_EL1, BANK, n / MAX_PER_BANK), SYS_MDSELR_EL1);
+	isb();
+	__write_wb_reg(reg, n % MAX_PER_BANK, val);
+	local_irq_restore(flags);
 }
 NOKPROBE_SYMBOL(write_wb_reg);
 
@@ -1005,6 +1047,8 @@ static int __init arch_hw_breakpoint_init(void)
 
 	/* Register cpu_suspend hw breakpoint restore hook */
 	cpu_suspend_set_dbg_restorer(hw_breakpoint_reset);
+	BUILD_BUG_ON((ARM_MAX_BRP % MAX_PER_BANK) != 0);
+	BUILD_BUG_ON((ARM_MAX_WRP % MAX_PER_BANK) != 0);
 
 	return ret;
 }
