@@ -153,6 +153,37 @@ static bool __init has_pv_steal_clock(void)
 	return (res.a0 == SMCCC_RET_SUCCESS);
 }
 
+void  __init pv_target_impl_cpu_init(void)
+{
+	struct arm_smccc_res res;
+	int index = 0, max_idx = -1;
+
+	/* Check we have already set targets */
+	if (target_impl_cpu_num)
+		return;
+
+	do {
+		arm_smccc_1_1_invoke(ARM_SMCCC_VENDOR_HYP_KVM_DISCOVER_IMPL_CPUS_FUNC_ID,
+				     index, &res);
+		if (res.a0 == SMCCC_RET_NOT_SUPPORTED)
+			return;
+
+		if (max_idx < 0) {
+			/* res.a0 should have a valid maximum CPU implementation index */
+			if (res.a0 >= MAX_TARGET_IMPL_CPUS)
+				return;
+			max_idx = res.a0;
+		}
+
+		target_impl_cpus[index].midr = res.a1;
+		target_impl_cpus[index].revidr = res.a2;
+		index++;
+	} while (index <= max_idx);
+
+	target_impl_cpu_num = index;
+	pr_info("Number of target implementation CPUs is %d\n", target_impl_cpu_num);
+}
+
 int __init pv_time_init(void)
 {
 	int ret;
