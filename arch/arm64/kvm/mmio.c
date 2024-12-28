@@ -124,11 +124,14 @@ int kvm_handle_mmio_return(struct kvm_vcpu *vcpu)
 		len = kvm_vcpu_dabt_get_as(vcpu);
 		data = kvm_mmio_read_buf(run->mmio.data, len);
 
-		if (kvm_vcpu_dabt_issext(vcpu) &&
-		    len < sizeof(unsigned long)) {
-			mask = 1U << ((len * 8) - 1);
-			data = (data ^ mask) - mask;
+		if (kvm_vcpu_dabt_issext(vcpu)) {
+			if (len > 0 && len < sizeof(unsigned long)) {
+				mask = 1U << ((len * 8) - 1);
+				data = (data ^ mask) - mask;
+			}
 		}
+
+
 
 		if (!kvm_vcpu_dabt_issf(vcpu))
 			data = data & 0xffffffff;
