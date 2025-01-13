@@ -22,6 +22,7 @@
 
 #include "vgic.h"
 #include "vgic-mmio.h"
+#include "trace.h"
 
 static struct kvm_device_ops kvm_arm_vgic_its_ops;
 
@@ -795,6 +796,8 @@ static int vgic_its_cmd_handle_discard(struct kvm *kvm, struct vgic_its *its,
 	u32 event_id = its_cmd_get_id(its_cmd);
 	struct its_ite *ite;
 
+	trace_vgic_its_cmd_discard(device_id, event_id);
+
 	ite = find_ite(its, device_id, event_id);
 	if (ite && its_is_collection_mapped(ite->collection)) {
 		struct its_device *device = find_its_device(its, device_id);
@@ -828,6 +831,8 @@ static int vgic_its_cmd_handle_movi(struct kvm *kvm, struct vgic_its *its,
 	struct kvm_vcpu *vcpu;
 	struct its_ite *ite;
 	struct its_collection *collection;
+
+	trace_vgic_its_cmd_movi(device_id, event_id, coll_id);
 
 	ite = find_ite(its, device_id, event_id);
 	if (!ite)
@@ -1035,6 +1040,8 @@ static int vgic_its_cmd_handle_mapi(struct kvm *kvm, struct vgic_its *its,
 	struct vgic_irq *irq;
 	int lpi_nr;
 
+	trace_vgic_its_cmd_mapi(device_id, event_id);
+
 	device = find_its_device(its, device_id);
 	if (!device)
 		return E_ITS_MAPTI_UNMAPPED_DEVICE;
@@ -1161,6 +1168,8 @@ static int vgic_its_cmd_handle_mapd(struct kvm *kvm, struct vgic_its *its,
 	struct its_device *device;
 	gpa_t gpa;
 
+	trace_vgic_its_cmd_mapd(device_id, valid, num_eventid_bits, itt_addr);
+
 	if (!vgic_its_check_id(its, its->baser_device_table, device_id, &gpa))
 		return E_ITS_MAPD_DEVICE_OOR;
 
@@ -1203,6 +1212,8 @@ static int vgic_its_cmd_handle_mapc(struct kvm *kvm, struct vgic_its *its,
 
 	valid = its_cmd_get_validbit(its_cmd);
 	coll_id = its_cmd_get_collection(its_cmd);
+
+	trace_vgic_its_cmd_mapc(coll_id, valid);
 
 	if (!valid) {
 		vgic_its_free_collection(its, coll_id);
@@ -1248,6 +1259,7 @@ static int vgic_its_cmd_handle_clear(struct kvm *kvm, struct vgic_its *its,
 	u32 event_id = its_cmd_get_id(its_cmd);
 	struct its_ite *ite;
 
+	trace_vgic_its_cmd_clear(device_id, event_id);
 
 	ite = find_ite(its, device_id, event_id);
 	if (!ite)
@@ -1278,6 +1290,7 @@ static int vgic_its_cmd_handle_inv(struct kvm *kvm, struct vgic_its *its,
 	u32 event_id = its_cmd_get_id(its_cmd);
 	struct its_ite *ite;
 
+	trace_vgic_its_cmd_inv(device_id, event_id);
 
 	ite = find_ite(its, device_id, event_id);
 	if (!ite)
@@ -1338,6 +1351,8 @@ static int vgic_its_cmd_handle_invall(struct kvm *kvm, struct vgic_its *its,
 	vcpu = collection_to_vcpu(kvm, collection);
 	vgic_its_invall(vcpu);
 
+	trace_vgic_its_cmd_invall(coll_id, vcpu->vcpu_id);
+
 	return 0;
 }
 
@@ -1363,6 +1378,8 @@ static int vgic_its_cmd_handle_movall(struct kvm *kvm, struct vgic_its *its,
 
 	if (!vcpu1 || !vcpu2)
 		return E_ITS_MOVALL_PROCNUM_OOR;
+
+	trace_vgic_its_cmd_movall(vcpu1->vcpu_id, vcpu2->vcpu_id);
 
 	if (vcpu1 == vcpu2)
 		return 0;
@@ -1391,6 +1408,8 @@ static int vgic_its_cmd_handle_int(struct kvm *kvm, struct vgic_its *its,
 {
 	u32 msi_data = its_cmd_get_id(its_cmd);
 	u64 msi_devid = its_cmd_get_deviceid(its_cmd);
+
+	trace_vgic_its_cmd_int(msi_devid, msi_data);
 
 	return vgic_its_trigger_msi(kvm, its, msi_devid, msi_data);
 }
