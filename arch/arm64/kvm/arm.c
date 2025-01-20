@@ -2661,6 +2661,12 @@ static int __init init_hyp_mode(void)
 		}
 	}
 
+	/*
+	 * Flush entire BSS since part of its data is read while the MMU is off.
+	 */
+	kvm_flush_dcache_to_poc(kvm_ksym_ref(__hyp_bss_start),
+				kvm_ksym_ref(__hyp_bss_end) - kvm_ksym_ref(__hyp_bss_start));
+
 	return 0;
 
 out_err:
