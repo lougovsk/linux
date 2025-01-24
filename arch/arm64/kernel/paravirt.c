@@ -13,6 +13,7 @@
 #include <linux/export.h>
 #include <linux/io.h>
 #include <linux/jump_label.h>
+#include <linux/memblock.h>
 #include <linux/printk.h>
 #include <linux/psci.h>
 #include <linux/reboot.h>
@@ -20,6 +21,7 @@
 #include <linux/types.h>
 #include <linux/static_call.h>
 
+#include <asm/hypervisor.h>
 #include <asm/paravirt.h>
 #include <asm/pvclock-abi.h>
 #include <asm/smp_plat.h>
@@ -151,6 +153,62 @@ static bool __init has_pv_steal_clock(void)
 			     ARM_SMCCC_HV_PV_TIME_ST, &res);
 
 	return (res.a0 == SMCCC_RET_SUCCESS);
+}
+
+void  __init pv_target_impl_cpu_init(void)
+{
+	int i;
+	unsigned long max_cpus;
+	struct arm_smccc_res res;
+	const u32 funcs[] = {
+		ARM_SMCCC_KVM_FUNC_DISCOVER_IMPL_VER,
+		ARM_SMCCC_KVM_FUNC_DISCOVER_IMPL_CPUS,
+	};
+
+	/* Check we have already set targets */
+	if (target_impl_cpu_num)
+		return;
+
+	for (i = 0; i < ARRAY_SIZE(funcs); ++i) {
+		if (!kvm_arm_hyp_service_available(funcs[i]))
+			return;
+	}
+
+	arm_smccc_1_1_invoke(ARM_SMCCC_VENDOR_HYP_KVM_DISCOVER_IMPL_VER_FUNC_ID,
+			     0, &res);
+	if (res.a0 != SMCCC_RET_SUCCESS)
+		return;
+
+	if (res.a1 != ARM_SMCCC_KVM_DISCOVER_IMPL_VER_1_0 || !res.a2) {
+		pr_warn("Unsupported target impl version or CPU implementations\n");
+		return;
+	}
+
+	max_cpus = res.a2;
+	target_impl_cpus = memblock_alloc(sizeof(*target_impl_cpus) * max_cpus,
+					  __alignof__(*target_impl_cpus));
+	if (!target_impl_cpus) {
+		pr_warn("Not enough memory for struct target_impl_cpu\n");
+		return;
+	}
+
+	for (i = 0; i < max_cpus; i++) {
+		arm_smccc_1_1_invoke(ARM_SMCCC_VENDOR_HYP_KVM_DISCOVER_IMPL_CPUS_FUNC_ID,
+				     i, &res);
+		if (res.a0 != SMCCC_RET_SUCCESS) {
+			memblock_free(target_impl_cpus,
+				      sizeof(*target_impl_cpus) * max_cpus);
+			target_impl_cpus = NULL;
+			pr_warn("Discovering target implementation CPUs failed\n");
+			return;
+		}
+		target_impl_cpus[i].midr = res.a1;
+		target_impl_cpus[i].revidr = res.a2;
+		target_impl_cpus[i].aidr = res.a3;
+	};
+
+	target_impl_cpu_num = max_cpus;
+	pr_info("Number of target implementation CPUs is %d\n", target_impl_cpu_num);
 }
 
 int __init pv_time_init(void)
