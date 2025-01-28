@@ -759,21 +759,6 @@ static void kvm_timer_vcpu_load_nested_switch(struct kvm_vcpu *vcpu,
 					    timer_irq(map->direct_ptimer),
 					    &arch_timer_irq_ops);
 		WARN_ON_ONCE(ret);
-
-		/*
-		 * The virtual offset behaviour is "interesting", as it
-		 * always applies when HCR_EL2.E2H==0, but only when
-		 * accessed from EL1 when HCR_EL2.E2H==1. So make sure we
-		 * track E2H when putting the HV timer in "direct" mode.
-		 */
-		if (map->direct_vtimer == vcpu_hvtimer(vcpu)) {
-			struct arch_timer_offset *offs = &map->direct_vtimer->offset;
-
-			if (vcpu_el2_e2h_is_set(vcpu))
-				offs->vcpu_offset = NULL;
-			else
-				offs->vcpu_offset = &__vcpu_sys_reg(vcpu, CNTVOFF_EL2);
-		}
 	}
 }
 
@@ -1045,18 +1030,6 @@ void kvm_timer_vcpu_reset(struct kvm_vcpu *vcpu)
 	for (int i = 0; i < nr_timers(vcpu); i++)
 		timer_set_ctl(vcpu_get_timer(vcpu, i), 0);
 
-	/*
-	 * A vcpu running at EL2 is in charge of the offset applied to
-	 * the virtual timer, so use the physical VM offset, and point
-	 * the vcpu offset to CNTVOFF_EL2.
-	 */
-	if (vcpu_has_nv(vcpu)) {
-		struct arch_timer_offset *offs = &vcpu_vtimer(vcpu)->offset;
-
-		offs->vcpu_offset = &__vcpu_sys_reg(vcpu, CNTVOFF_EL2);
-		offs->vm_offset = &vcpu->kvm->arch.timer_data.poffset;
-	}
-
 	if (timer->enabled) {
 		for (int i = 0; i < nr_timers(vcpu); i++)
 			kvm_timer_update_irq(vcpu, false,
@@ -1100,6 +1073,27 @@ static void timer_context_init(struct kvm_vcpu *vcpu, int timerid)
 		ctxt->host_timer_irq = host_vtimer_irq;
 		break;
 	}
+}
+
+void kvm_timer_vcpu_nv_init(struct kvm_vcpu *vcpu)
+{
+	/*
+	 * A vcpu running at EL2 is in charge of the offset applied to
+	 * the virtual timer, so use the physical VM offset, and point
+	 * the vcpu offset to CNTVOFF_EL2.
+	 *
+	 * The virtual offset behaviour is "interesting", as it always
+	 * applies when HCR_EL2.E2H==0, but only when accessed from EL1 when
+	 * HCR_EL2.E2H==1. Apply it to the HV timer when E2H==0.
+	 */
+	struct arch_timer_offset *offs = &vcpu_vtimer(vcpu)->offset;
+	u64 *voff = __ctxt_sys_reg(&vcpu->arch.ctxt, CNTVOFF_EL2);
+
+	offs->vcpu_offset = voff;
+	offs->vm_offset = &vcpu->kvm->arch.timer_data.poffset;
+
+	if (!vcpu_el2_e2h_is_set(vcpu))
+		vcpu_hvtimer(vcpu)->offset.vcpu_offset = voff;
 }
 
 void kvm_timer_vcpu_init(struct kvm_vcpu *vcpu)

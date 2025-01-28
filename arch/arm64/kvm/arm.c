@@ -815,6 +815,9 @@ int kvm_arch_vcpu_run_pid_change(struct kvm_vcpu *vcpu)
 	if (ret)
 		return ret;
 
+	if (vcpu_has_nv(vcpu))
+		kvm_timer_vcpu_nv_init(vcpu);
+
 	/*
 	 * This needs to happen after any restriction has been applied
 	 * to the feature set.
