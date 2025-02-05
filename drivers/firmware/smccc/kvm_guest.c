@@ -6,7 +6,10 @@
 #include <linux/bitmap.h>
 #include <linux/cache.h>
 #include <linux/kernel.h>
+#include <linux/memblock.h>
 #include <linux/string.h>
+
+#include <uapi/linux/psci.h>
 
 #include <asm/hypervisor.h>
 
@@ -51,3 +54,63 @@ bool kvm_arm_hyp_service_available(u32 func_id)
 	return test_bit(func_id, __kvm_arm_hyp_services);
 }
 EXPORT_SYMBOL_GPL(kvm_arm_hyp_service_available);
+
+void  __init kvm_arm_target_impl_cpu_init(void)
+{
+	int i;
+	u32 ver;
+	u64 max_cpus;
+	struct arm_smccc_res res;
+
+	/* Check we have already set targets */
+	if (target_impl_cpu_num)
+		return;
+
+	if (!kvm_arm_hyp_service_available(ARM_SMCCC_KVM_FUNC_DISCOVER_IMPL_VER) ||
+	    !kvm_arm_hyp_service_available(ARM_SMCCC_KVM_FUNC_DISCOVER_IMPL_CPUS))
+		return;
+
+	arm_smccc_1_1_invoke(ARM_SMCCC_VENDOR_HYP_KVM_DISCOVER_IMPL_VER_FUNC_ID,
+			     0, &res);
+	if (res.a0 != SMCCC_RET_SUCCESS)
+		return;
+
+	/* Version info is in lower 32 bits and is in SMMCCC_VERSION format */
+	ver = lower_32_bits(res.a1);
+	if (PSCI_VERSION_MAJOR(ver) != 1) {
+		pr_warn("Unsupported target CPU implementation version v%d.%d\n",
+			PSCI_VERSION_MAJOR(ver), PSCI_VERSION_MINOR(ver));
+		return;
+	}
+
+	if (!res.a2) {
+		pr_warn("No target implementation CPUs specified\n");
+		return;
+	}
+
+	max_cpus = res.a2;
+	target_impl_cpus = memblock_alloc(sizeof(*target_impl_cpus) * max_cpus,
+					  __alignof__(*target_impl_cpus));
+	if (!target_impl_cpus) {
+		pr_warn("Not enough memory for struct target_impl_cpu\n");
+		return;
+	}
+
+	for (i = 0; i < max_cpus; i++) {
+		arm_smccc_1_1_invoke(ARM_SMCCC_VENDOR_HYP_KVM_DISCOVER_IMPL_CPUS_FUNC_ID,
+				     i, &res);
+		if (res.a0 != SMCCC_RET_SUCCESS) {
+			memblock_free(target_impl_cpus,
+				      sizeof(*target_impl_cpus) * max_cpus);
+			target_impl_cpus = NULL;
+			pr_warn("Discovering target implementation CPUs failed\n");
+			return;
+		}
+		target_impl_cpus[i].midr = res.a1;
+		target_impl_cpus[i].revidr = res.a2;
+		target_impl_cpus[i].aidr = res.a3;
+	};
+
+	target_impl_cpu_num = max_cpus;
+	pr_info("Number of target implementation CPUs is %d\n", target_impl_cpu_num);
+}
