@@ -359,7 +359,11 @@ int kvm_smccc_call_handler(struct kvm_vcpu *vcpu)
 		val[3] = ARM_SMCCC_VENDOR_HYP_UID_KVM_REG_3;
 		break;
 	case ARM_SMCCC_VENDOR_HYP_KVM_FEATURES_FUNC_ID:
-		val[0] = smccc_feat->vendor_hyp_bmap;
+		val[0] = GENMASK(ARM_SMCCC_KVM_FUNC_PTP,
+				 ARM_SMCCC_KVM_FUNC_FEATURES);
+		/* Function numbers 2-63 are reserved for pKVM for now */
+		val[2] = GENMASK((ARM_SMCCC_KVM_FUNC_DISCOVER_IMPL_CPUS - 64),
+				 (ARM_SMCCC_KVM_FUNC_DISCOVER_IMPL_VER - 64));
 		break;
 	case ARM_SMCCC_VENDOR_HYP_KVM_PTP_FUNC_ID:
 		kvm_ptp_get_time(vcpu, val);
