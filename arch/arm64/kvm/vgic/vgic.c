@@ -542,6 +542,9 @@ void kvm_vgic_reset_mapped_irq(struct kvm_vcpu *vcpu, u32 vintid)
 	struct vgic_irq *irq = vgic_get_vcpu_irq(vcpu, vintid);
 	unsigned long flags;
 
+	if (!irq)
+		return;
+
 	if (!irq->hw)
 		goto out;
 
