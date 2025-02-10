@@ -321,6 +321,9 @@ static int handle_ls64b(struct kvm_vcpu *vcpu)
 	case ESR_ELx_ISS_LDST64B:
 		allowed = kvm_has_feat(kvm, ID_AA64ISAR1_EL1, LS64, LS64);
 		break;
+	case ESR_ELx_ISS_PSBCSYNC:
+		allowed = kvm_has_feat(kvm, ID_AA64DFR0_EL1, PMSVer, V1P5);
+		break;
 	default:
 		/* Clearly, we're missing something. */
 		goto unknown_trap;
@@ -342,6 +345,9 @@ static int handle_ls64b(struct kvm_vcpu *vcpu)
 			break;
 		case ESR_ELx_ISS_LDST64B:
 			fwd = !(hcrx & HCRX_EL2_EnALS);
+			break;
+		case ESR_ELx_ISS_PSBCSYNC:
+			fwd = (__vcpu_sys_reg(vcpu, HFGITR_EL2) & HFGITR_EL2_PSBCSYNC);
 			break;
 		default:
 			/* We don't expect to be here */
