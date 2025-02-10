@@ -586,3 +586,29 @@ void compute_fgu(struct kvm *kvm, enum fgt_group_id fgt)
 
 	kvm->arch.fgu[fgt] = val;
 }
+
+u64 get_reg_disabled_bits(struct kvm *kvm, enum vcpu_sysreg reg)
+{
+	switch (reg) {
+	case HFGRTR_EL2:
+		return  __compute_unsupported_bits(kvm, hfgrtr_feat_map,
+						   ARRAY_SIZE(hfgrtr_feat_map), 0);
+	case HFGWTR_EL2:
+		return  __compute_unsupported_bits(kvm, hfgwtr_feat_map,
+						   ARRAY_SIZE(hfgwtr_feat_map), 0);
+	case HFGITR_EL2:
+		return  __compute_unsupported_bits(kvm, hfgitr_feat_map,
+						   ARRAY_SIZE(hfgitr_feat_map), 0);
+	case HDFGRTR_EL2:
+		return  __compute_unsupported_bits(kvm, hdfgrtr_feat_map,
+						   ARRAY_SIZE(hdfgrtr_feat_map), 0);
+	case HDFGWTR_EL2:
+		return  __compute_unsupported_bits(kvm, hdfgwtr_feat_map,
+						   ARRAY_SIZE(hdfgwtr_feat_map), 0);
+	case HAFGRTR_EL2:
+		return  __compute_unsupported_bits(kvm, hafgrtr_feat_map,
+						   ARRAY_SIZE(hafgrtr_feat_map), 0);
+	default:
+		return 0;
+	}
+}
