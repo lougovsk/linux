@@ -2270,14 +2270,14 @@ static bool bad_redir_trap(struct kvm_vcpu *vcpu,
 #define ID_DESC(name)				\
 	SYS_DESC(SYS_##name),			\
 	.access	= access_id_reg,		\
-	.get_user = get_id_reg			\
+	.get_user = get_id_reg,			\
+	.reset = kvm_read_sanitised_id_reg
 
 /* sys_reg_desc initialiser for known cpufeature ID registers */
 #define ID_SANITISED(name) {			\
 	ID_DESC(name),				\
 	.set_user = set_id_reg,			\
 	.visibility = id_visibility,		\
-	.reset = kvm_read_sanitised_id_reg,	\
 	.val = 0,				\
 }
 
@@ -2286,7 +2286,6 @@ static bool bad_redir_trap(struct kvm_vcpu *vcpu,
 	ID_DESC(name),				\
 	.set_user = set_id_reg,			\
 	.visibility = aa32_id_visibility,	\
-	.reset = kvm_read_sanitised_id_reg,	\
 	.val = 0,				\
 }
 
@@ -2295,7 +2294,6 @@ static bool bad_redir_trap(struct kvm_vcpu *vcpu,
 	ID_DESC(name),				\
 	.set_user = set_id_reg,			\
 	.visibility = id_visibility,		\
-	.reset = kvm_read_sanitised_id_reg,	\
 	.val = mask,				\
 }
 
@@ -2304,7 +2302,6 @@ static bool bad_redir_trap(struct kvm_vcpu *vcpu,
 	ID_DESC(sysreg),				\
 	.set_user = set_##name,				\
 	.visibility = id_visibility,			\
-	.reset = kvm_read_sanitised_id_reg,		\
 	.val = (mask),					\
 }
 
@@ -2319,7 +2316,6 @@ static bool bad_redir_trap(struct kvm_vcpu *vcpu,
 	.get_user = get_id_reg,				\
 	.set_user = set_id_reg,				\
 	.visibility = raz_visibility,			\
-	.reset = kvm_read_sanitised_id_reg,		\
 	.val = 0,					\
 }
 
@@ -2332,7 +2328,6 @@ static bool bad_redir_trap(struct kvm_vcpu *vcpu,
 	ID_DESC(name),				\
 	.set_user = set_id_reg,			\
 	.visibility = raz_visibility,		\
-	.reset = kvm_read_sanitised_id_reg,	\
 	.val = 0,				\
 }
 
