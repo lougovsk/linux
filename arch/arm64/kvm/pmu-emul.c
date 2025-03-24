@@ -780,6 +780,13 @@ void kvm_host_pmu_init(struct arm_pmu *pmu)
 	struct arm_pmu_entry *entry;
 
 	/*
+	 * When Hyp mode is unavailable (e.g., the kernel boots from EL1),
+	 * skip the unnecessary KVM PMU initialization.
+	 */
+	if (!is_hyp_mode_available())
+		return;
+
+	/*
 	 * Check the sanitised PMU version for the system, as KVM does not
 	 * support implementations where PMUv3 exists on a subset of CPUs.
 	 */
