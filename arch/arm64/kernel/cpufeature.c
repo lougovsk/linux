@@ -2473,6 +2473,12 @@ test_has_mpam_hcr(const struct arm64_cpu_capabilities *entry, int scope)
 	return idr & MPAMIDR_EL1_HAS_HCR;
 }
 
+static bool
+has_e2h_res1(const struct arm64_cpu_capabilities *entry, int __unused)
+{
+	return cpu_has_e2h_res1();
+}
+
 static const struct arm64_cpu_capabilities arm64_features[] = {
 	{
 		.capability = ARM64_ALWAYS_BOOT,
@@ -3043,6 +3049,12 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.matches = has_pmuv3,
 	},
 #endif
+	{
+		.desc = "HCR_EL2.E2H RES1",
+		.capability = ARM64_HAS_E2H_RES1,
+		.type = ARM64_CPUCAP_SYSTEM_FEATURE,
+		.matches = has_e2h_res1,
+	},
 	{},
 };
 

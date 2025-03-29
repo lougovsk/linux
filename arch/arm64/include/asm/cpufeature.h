@@ -889,6 +889,29 @@ static inline bool cpu_has_hw_af(void)
 						ID_AA64MMFR1_EL1_HAFDBS_SHIFT);
 }
 
+/*
+ * Check whether FEAT_E2H0 is not supported, in which case HCR_EL2.E2H
+ * is implemented as RES1.
+ */
+static __always_inline bool cpu_has_e2h_res1(void)
+{
+	u64 mmfr4;
+	u32 val;
+
+	/*
+	 * It's also used for checking the kvm mode cfg in early_param()
+	 * where boot capabilities is not initialized. In such case read
+	 * mmfr4 directly. This works same after boot stage since
+	 * ARM64_HAS_E2H_RES1 is a system feature, the cached sanitised
+	 * value keeps same with every single CPU.
+	 */
+	mmfr4 = read_sysreg_s(SYS_ID_AA64MMFR4_EL1);
+	val = cpuid_feature_extract_signed_field(mmfr4,
+						 ID_AA64MMFR4_EL1_E2H0_SHIFT);
+
+	return val != ID_AA64MMFR4_EL1_E2H0_IMP;
+}
+
 static inline bool cpu_has_pan(void)
 {
 	u64 mmfr1 = read_cpuid(ID_AA64MMFR1_EL1);
