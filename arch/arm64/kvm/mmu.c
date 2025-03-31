@@ -1658,6 +1658,25 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	if (exec_fault && device)
 		return -ENOEXEC;
 
+	if (esr_fsc_is_excl_atomic_fault(kvm_vcpu_get_esr(vcpu))) {
+		/*
+		 * Target address is normal memory on the Host. We come here
+		 * because:
+		 * 1) Guest map it as device memory and perform LS64 operations
+		 * 2) VMM report it as device memory mistakenly
+		 * Warn the VMM and inject the DABT back to the guest.
+		 */
+		if (!device)
+			kvm_err("memory attributes maybe incorrect for hva 0x%lx\n", hva);
+
+		/*
+		 * Otherwise it's a piece of device memory on the Host.
+		 * Inject the DABT back to the guest since the mapping
+		 * is wrong.
+		 */
+		kvm_inject_dabt_excl_atomic(vcpu, kvm_vcpu_get_hfar(vcpu));
+	}
+
 	/*
 	 * Potentially reduce shadow S2 permissions to match the guest's own
 	 * S2. For exec faults, we'd only reach this point if the guest
@@ -1836,7 +1855,8 @@ int kvm_handle_guest_abort(struct kvm_vcpu *vcpu)
 	/* Check the stage-2 fault is trans. fault or write fault */
 	if (!esr_fsc_is_translation_fault(esr) &&
 	    !esr_fsc_is_permission_fault(esr) &&
-	    !esr_fsc_is_access_flag_fault(esr)) {
+	    !esr_fsc_is_access_flag_fault(esr) &&
+	    !esr_fsc_is_excl_atomic_fault(esr)) {
 		kvm_err("Unsupported FSC: EC=%#x xFSC=%#lx ESR_EL2=%#lx\n",
 			kvm_vcpu_trap_get_class(vcpu),
 			(unsigned long)kvm_vcpu_trap_get_fault(vcpu),
@@ -1917,6 +1937,21 @@ int kvm_handle_guest_abort(struct kvm_vcpu *vcpu)
 			kvm_incr_pc(vcpu);
 			ret = 1;
 			goto out_unlock;
+		}
+
+		/*
+		 * If instructions of FEAT_{LS64, LS64_V} operated on
+		 * unsupported memory regions, a DABT for unsupported
+		 * Exclusive or atomic access is generated. It's
+		 * implementation defined whether the exception will
+		 * be taken to, a stage-1 DABT or the final enabled
+		 * stage of translation (stage-2 in this case as we
+		 * hit here). Inject a DABT to the guest to handle it
+		 * if it's implemented as a stage-2 DABT.
+		 */
+		if (esr_fsc_is_excl_atomic_fault(esr)) {
+			kvm_inject_dabt_excl_atomic(vcpu, kvm_vcpu_get_hfar(vcpu));
+			return 1;
 		}
 
 		/*
