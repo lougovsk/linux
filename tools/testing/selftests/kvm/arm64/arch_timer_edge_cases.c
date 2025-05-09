@@ -31,7 +31,7 @@ static const int32_t TVAL_MIN = INT32_MIN;
 static const uint32_t TIMEOUT_NO_IRQ_US = 50000;
 
 /* A nice counter value to use as the starting one for most tests. */
-static const uint64_t DEF_CNT = (CVAL_MAX / 2);
+static const uint64_t DEF_CNT = (CVAL_MAX / 4);
 
 /* Number of runs. */
 static const uint32_t NR_TEST_ITERS_DEF = 5;
