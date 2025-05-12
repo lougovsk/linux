@@ -26,6 +26,7 @@ struct test_args {
 	/* Members of struct kvm_arm_counter_offset */
 	uint64_t counter_offset;
 	uint64_t reserved;
+	bool is_nested;
 };
 
 /* Shared variables between host and guest */

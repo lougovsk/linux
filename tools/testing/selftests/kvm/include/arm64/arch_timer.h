@@ -11,6 +11,8 @@
 enum arch_timer {
 	VIRTUAL,
 	PHYSICAL,
+	HVIRTUAL,
+	HPHYSICAL,
 };
 
 #define CTL_ENABLE	(1 << 0)
@@ -37,8 +39,10 @@ static inline uint64_t timer_get_cntct(enum arch_timer timer)
 
 	switch (timer) {
 	case VIRTUAL:
+	case HVIRTUAL:
 		return read_sysreg(cntvct_el0);
 	case PHYSICAL:
+	case HPHYSICAL:
 		return read_sysreg(cntpct_el0);
 	default:
 		GUEST_FAIL("Unexpected timer type = %u", timer);
@@ -52,9 +56,11 @@ static inline void timer_set_cval(enum arch_timer timer, uint64_t cval)
 {
 	switch (timer) {
 	case VIRTUAL:
+	case HVIRTUAL:
 		write_sysreg(cval, cntv_cval_el0);
 		break;
 	case PHYSICAL:
+	case HPHYSICAL:
 		write_sysreg(cval, cntp_cval_el0);
 		break;
 	default:
@@ -68,8 +74,10 @@ static inline uint64_t timer_get_cval(enum arch_timer timer)
 {
 	switch (timer) {
 	case VIRTUAL:
+	case HVIRTUAL:
 		return read_sysreg(cntv_cval_el0);
 	case PHYSICAL:
+	case HPHYSICAL:
 		return read_sysreg(cntp_cval_el0);
 	default:
 		GUEST_FAIL("Unexpected timer type = %u", timer);
@@ -83,9 +91,11 @@ static inline void timer_set_tval(enum arch_timer timer, int32_t tval)
 {
 	switch (timer) {
 	case VIRTUAL:
+	case HVIRTUAL:
 		write_sysreg(tval, cntv_tval_el0);
 		break;
 	case PHYSICAL:
+	case HPHYSICAL:
 		write_sysreg(tval, cntp_tval_el0);
 		break;
 	default:
@@ -100,8 +110,10 @@ static inline int32_t timer_get_tval(enum arch_timer timer)
 	isb();
 	switch (timer) {
 	case VIRTUAL:
+	case HVIRTUAL:
 		return read_sysreg(cntv_tval_el0);
 	case PHYSICAL:
+	case HPHYSICAL:
 		return read_sysreg(cntp_tval_el0);
 	default:
 		GUEST_FAIL("Could not get timer %d\n", timer);
@@ -115,9 +127,11 @@ static inline void timer_set_ctl(enum arch_timer timer, uint32_t ctl)
 {
 	switch (timer) {
 	case VIRTUAL:
+	case HVIRTUAL:
 		write_sysreg(ctl, cntv_ctl_el0);
 		break;
 	case PHYSICAL:
+	case HPHYSICAL:
 		write_sysreg(ctl, cntp_ctl_el0);
 		break;
 	default:
@@ -131,8 +145,10 @@ static inline uint32_t timer_get_ctl(enum arch_timer timer)
 {
 	switch (timer) {
 	case VIRTUAL:
+	case HVIRTUAL:
 		return read_sysreg(cntv_ctl_el0);
 	case PHYSICAL:
+	case HPHYSICAL:
 		return read_sysreg(cntp_ctl_el0);
 	default:
 		GUEST_FAIL("Unexpected timer type = %u", timer);

@@ -35,6 +35,7 @@ struct test_args test_args = {
 	.migration_freq_ms = TIMER_TEST_MIGRATION_FREQ_MS,
 	.timer_err_margin_us = TIMER_TEST_ERR_MARGIN_US,
 	.reserved = 1,
+	.is_nested = false,
 };
 
 struct kvm_vcpu *vcpus[KVM_MAX_VCPUS];
@@ -43,6 +44,7 @@ struct test_vcpu_shared_data vcpu_shared_data[KVM_MAX_VCPUS];
 static pthread_t pt_vcpu_run[KVM_MAX_VCPUS];
 static unsigned long *vcpu_done_map;
 static pthread_mutex_t vcpu_done_map_lock;
+bool is_nested;
 
 static void *test_vcpu_run(void *arg)
 {
@@ -193,6 +195,7 @@ static void test_print_help(char *name)
 	pr_info("\t-o: Counter offset (in counter cycles, default: 0) [aarch64-only]\n");
 	pr_info("\t-e: Interrupt arrival error margin (in us) of the guest timer (default: %u)\n",
 		TIMER_TEST_ERR_MARGIN_US);
+	pr_info("\t-g: Enable Nested Virtualization, run guest code as guest hypervisor (default: Disabled)\n");
 	pr_info("\t-h: print this help screen\n");
 }
 
@@ -200,7 +203,7 @@ static bool parse_args(int argc, char *argv[])
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "hn:i:p:m:o:e:")) != -1) {
+	while ((opt = getopt(argc, argv, "hn:i:p:m:o:e:g:")) != -1) {
 		switch (opt) {
 		case 'n':
 			test_args.nr_vcpus = atoi_positive("Number of vCPUs", optarg);
@@ -225,6 +228,9 @@ static bool parse_args(int argc, char *argv[])
 		case 'o':
 			test_args.counter_offset = strtol(optarg, NULL, 0);
 			test_args.reserved = 0;
+			break;
+		case 'g':
+			test_args.is_nested = atoi_non_negative("Is Nested", optarg);
 			break;
 		case 'h':
 		default:
