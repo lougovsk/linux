@@ -13,6 +13,7 @@
 #include "kvm_util.h"
 #include "processor.h"
 #include "vgic.h"
+#include "nv_util.h"
 
 #define NR_VCPUS		4
 
@@ -29,6 +30,7 @@ struct vm_gic {
 	uint32_t gic_dev_type;
 };
 
+static bool is_nested;
 static uint64_t max_phys_size;
 
 /*
@@ -75,9 +77,19 @@ static struct vm_gic vm_gic_create_with_vcpus(uint32_t gic_dev_type,
 					      struct kvm_vcpu *vcpus[])
 {
 	struct vm_gic v;
+	struct kvm_vcpu_init init;
+	int i;
 
 	v.gic_dev_type = gic_dev_type;
-	v.vm = vm_create_with_vcpus(nr_vcpus, guest_code, vcpus);
+
+	v.vm = vm_create(nr_vcpus);
+	vm_ioctl(v.vm, KVM_ARM_PREFERRED_TARGET, &init);
+	if (is_nested)
+		init_vcpu_nested(&init);
+
+	for (i = 0; i < nr_vcpus; i++)
+		vcpus[i] = aarch64_vcpu_add(v.vm, i, &init, guest_code);
+
 	v.gic_fd = kvm_create_device(v.vm, gic_dev_type);
 
 	return v;
@@ -336,14 +348,19 @@ static void test_vgic_then_vcpus(uint32_t gic_dev_type)
 	struct kvm_vcpu *vcpus[NR_VCPUS];
 	struct vm_gic v;
 	int ret, i;
+	struct kvm_vcpu_init init;
 
 	v = vm_gic_create_with_vcpus(gic_dev_type, 1, vcpus);
 
 	subtest_dist_rdist(&v);
 
 	/* Add the rest of the VCPUs */
+	vm_ioctl(v.vm, KVM_ARM_PREFERRED_TARGET, &init);
+	if (is_nested)
+		init_vcpu_nested(&init);
+
 	for (i = 1; i < NR_VCPUS; ++i)
-		vcpus[i] = vm_vcpu_add(v.vm, i, guest_code);
+		vcpus[i] = aarch64_vcpu_add(v.vm, i, &init, guest_code);
 
 	ret = run_vcpu(vcpus[3]);
 	TEST_ASSERT(ret == -EINVAL, "dist/rdist overlap detected on 1st vcpu run");
@@ -606,6 +623,7 @@ static void test_v3_redist_ipa_range_check_at_vcpu_run(void)
 	struct vm_gic v;
 	int ret, i;
 	uint64_t addr;
+	struct kvm_vcpu_init init;
 
 	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, 1, vcpus);
 
@@ -619,8 +637,12 @@ static void test_v3_redist_ipa_range_check_at_vcpu_run(void)
 			    KVM_VGIC_V3_ADDR_TYPE_DIST, &addr);
 
 	/* Add the rest of the VCPUs */
-	for (i = 1; i < NR_VCPUS; ++i)
-		vcpus[i] = vm_vcpu_add(v.vm, i, guest_code);
+	vm_ioctl(v.vm, KVM_ARM_PREFERRED_TARGET, &init);
+	if (is_nested)
+		init_vcpu_nested(&init);
+
+	for (i = 1; i < NR_VCPUS; i++)
+		vcpus[i] = aarch64_vcpu_add(v.vm, i, &init, guest_code);
 
 	kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
 			    KVM_DEV_ARM_VGIC_CTRL_INIT, NULL);
@@ -733,11 +755,33 @@ void run_tests(uint32_t gic_dev_type)
 	}
 }
 
-int main(int ac, char **av)
+static void pr_usage(const char *name)
+{
+	pr_info("%s [-g nv] -h\n", name);
+	pr_info("  -g:\tEnable Nested Virtualization, run guest code as guest hypervisor (default: Disabled)\n");
+}
+
+int main(int argc, char **argv)
 {
 	int ret;
 	int pa_bits;
 	int cnt_impl = 0;
+	int opt;
+
+	while ((opt = getopt(argc, argv, "g:")) != -1) {
+		switch (opt) {
+		case 'g':
+			is_nested = atoi_non_negative("Is Nested", optarg);
+			break;
+		case 'h':
+		default:
+			pr_usage(argv[0]);
+			return 1;
+		}
+	}
+
+	if (is_nested)
+		TEST_REQUIRE(kvm_has_cap(KVM_CAP_ARM_EL2));
 
 	pa_bits = vm_guest_mode_params[VM_MODE_DEFAULT].pa_bits;
 	max_phys_size = 1ULL << pa_bits;

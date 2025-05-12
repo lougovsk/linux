@@ -15,6 +15,7 @@
 #include "processor.h"
 #include "test_util.h"
 #include "kvm_util.h"
+#include "nv_util.h"
 #include "gic.h"
 #include "gic_v3.h"
 #include "vgic.h"
@@ -728,7 +729,7 @@ static void print_args(struct test_args *args)
 			args->eoi_split);
 }
 
-static void test_vgic(uint32_t nr_irqs, bool level_sensitive, bool eoi_split)
+static void test_vgic(uint32_t nr_irqs, bool level_sensitive, bool eoi_split, bool is_nested)
 {
 	struct ucall uc;
 	int gic_fd;
@@ -747,7 +748,10 @@ static void test_vgic(uint32_t nr_irqs, bool level_sensitive, bool eoi_split)
 
 	print_args(&args);
 
-	vm = vm_create_with_one_vcpu(&vcpu, guest_code);
+	if (is_nested)
+		vm = nv_vm_create_with_vcpus_gic(1, &vcpu, NULL, guest_code);
+	else
+		vm = vm_create_with_one_vcpu(&vcpu, guest_code);
 
 	vm_init_descriptor_tables(vm);
 	vcpu_init_descriptor_tables(vcpu);
@@ -795,7 +799,8 @@ static void help(const char *name)
 		"It has to be a multiple of 32 and between 64 and 1024.\n");
 	printf(" -e: if 1 then EOI is split into a write to DIR on top "
 		"of writing EOI.\n");
-	printf(" -l: specify whether the IRQs are level-sensitive (1) or not (0).");
+	printf(" -l: specify whether the IRQs are level-sensitive (1) or not (0).\n");
+	printf(" -g: Enable Nested Virtualization, run guest code as guest hypervisor (default: Disabled)\n");
 	puts("");
 	exit(1);
 }
@@ -807,8 +812,9 @@ int main(int argc, char **argv)
 	bool level_sensitive = false;
 	int opt;
 	bool eoi_split = false;
+	bool is_nested = false;
 
-	while ((opt = getopt(argc, argv, "hn:e:l:")) != -1) {
+	while ((opt = getopt(argc, argv, "hn:e:l:g:")) != -1) {
 		switch (opt) {
 		case 'n':
 			nr_irqs = atoi_non_negative("Number of IRQs", optarg);
@@ -823,6 +829,9 @@ int main(int argc, char **argv)
 			level_sensitive = (bool)atoi_paranoid(optarg);
 			default_args = false;
 			break;
+		case 'g':
+			is_nested = atoi_non_negative("Is Nested", optarg);
+			break;
 		case 'h':
 		default:
 			help(argv[0]);
@@ -835,12 +844,12 @@ int main(int argc, char **argv)
 	 * combinations.
 	 */
 	if (default_args) {
-		test_vgic(nr_irqs, false /* level */, false /* eoi_split */);
-		test_vgic(nr_irqs, false /* level */, true /* eoi_split */);
-		test_vgic(nr_irqs, true /* level */, false /* eoi_split */);
-		test_vgic(nr_irqs, true /* level */, true /* eoi_split */);
+		test_vgic(nr_irqs, false /* level */, false /* eoi_split */, is_nested);
+		test_vgic(nr_irqs, false /* level */, true /* eoi_split */, is_nested);
+		test_vgic(nr_irqs, true /* level */, false /* eoi_split */, is_nested);
+		test_vgic(nr_irqs, true /* level */, true /* eoi_split */, is_nested);
 	} else {
-		test_vgic(nr_irqs, level_sensitive, eoi_split);
+		test_vgic(nr_irqs, level_sensitive, eoi_split, is_nested);
 	}
 
 	return 0;

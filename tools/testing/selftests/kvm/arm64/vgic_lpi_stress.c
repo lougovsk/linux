@@ -11,6 +11,7 @@
 #include <sys/sysinfo.h>
 
 #include "kvm_util.h"
+#include "nv_util.h"
 #include "gic.h"
 #include "gic_v3.h"
 #include "gic_v3_its.h"
@@ -43,10 +44,12 @@ static struct test_data {
 
 	vm_paddr_t	lpi_prop_table;
 	vm_paddr_t	lpi_pend_tables;
+	bool		is_nested;
 } test_data =  {
 	.nr_cpus	= 1,
 	.nr_devices	= 1,
 	.nr_event_ids	= 16,
+	.is_nested      = false,
 };
 
 static void guest_irq_handler(struct ex_regs *regs)
@@ -333,14 +336,20 @@ static void run_test(void)
 static void setup_vm(void)
 {
 	int i;
+	bool is_nested = test_data.is_nested;
+	u32 nr_cpus = test_data.nr_cpus;
 
 	vcpus = malloc(test_data.nr_cpus * sizeof(struct kvm_vcpu));
 	TEST_ASSERT(vcpus, "Failed to allocate vCPU array");
 
-	vm = vm_create_with_vcpus(test_data.nr_cpus, guest_code, vcpus);
+
+	if (is_nested)
+		vm = nv_vm_create_with_vcpus_gic(nr_cpus, vcpus, NULL, guest_code);
+	else
+		vm = vm_create_with_vcpus(nr_cpus, guest_code, vcpus);
 
 	vm_init_descriptor_tables(vm);
-	for (i = 0; i < test_data.nr_cpus; i++)
+	for (i = 0; i < nr_cpus; i++)
 		vcpu_init_descriptor_tables(vcpus[i]);
 
 	vm_install_exception_handler(vm, VECTOR_IRQ_CURRENT, guest_irq_handler);
@@ -367,6 +376,7 @@ static void pr_usage(const char *name)
 	pr_info("  -d:\tnumber of devices (default: %u)\n", test_data.nr_devices);
 	pr_info("  -e:\tnumber of event IDs per device (default: %u)\n", test_data.nr_event_ids);
 	pr_info("  -i:\tnumber of iterations (default: %lu)\n", nr_iterations);
+	pr_info("  -g:\tEnable Nested Virtualization, run guest code as guest hypervisor (default: Disabled)\n");
 }
 
 int main(int argc, char **argv)
@@ -374,7 +384,7 @@ int main(int argc, char **argv)
 	u32 nr_threads;
 	int c;
 
-	while ((c = getopt(argc, argv, "hv:d:e:i:")) != -1) {
+	while ((c = getopt(argc, argv, "hv:d:e:i:g:")) != -1) {
 		switch (c) {
 		case 'v':
 			test_data.nr_cpus = atoi(optarg);
@@ -387,6 +397,9 @@ int main(int argc, char **argv)
 			break;
 		case 'i':
 			nr_iterations = strtoul(optarg, NULL, 0);
+			break;
+		case 'g':
+			test_data.is_nested = atoi_non_negative("Is Nested", optarg);
 			break;
 		case 'h':
 		default:
