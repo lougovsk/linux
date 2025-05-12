@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <test_util.h>
 #include <kvm_util.h>
+#include <nv_util.h>
 #include <processor.h>
 #include <asm/sysreg.h>
 #include <linux/bitfield.h>
@@ -69,6 +70,8 @@ struct test_params {
 	enum vm_mem_backing_src_type src_type;
 	struct test_desc *test_desc;
 };
+
+static bool is_nested;
 
 static inline void flush_tlb_page(uint64_t vaddr)
 {
@@ -701,14 +704,27 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	struct kvm_vm *vm;
 	struct kvm_vcpu *vcpu;
 	struct uffd_desc *pt_uffd, *data_uffd;
+	int gic_fd = -1;
 
 	print_test_banner(mode, p);
 
-	vm = ____vm_create(VM_SHAPE(mode));
-	setup_memslots(vm, p);
+	if (is_nested) {
+		struct kvm_vcpu_init init;
+
+		vm = ____vm_create(VM_SHAPE(mode));
+		setup_memslots(vm, p);
+		vm_ioctl(vm, KVM_ARM_PREFERRED_TARGET, &init);
+		init_vcpu_nested(&init);
+		vcpu = aarch64_vcpu_add(vm, 0, &init, guest_code);
+		gic_fd = vgic_v3_setup(vm, 1, 64);
+	} else {
+		vm = ____vm_create(VM_SHAPE(mode));
+		setup_memslots(vm, p);
+		vcpu = vm_vcpu_add(vm, 0, guest_code);
+	}
+
 	kvm_vm_elf_load(vm, program_invocation_name);
 	setup_ucall(vm);
-	vcpu = vm_vcpu_add(vm, 0, guest_code);
 
 	setup_gva_maps(vm);
 
@@ -728,6 +744,9 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 
 	vcpu_run_loop(vm, vcpu, test);
 
+	if (is_nested)
+		close(gic_fd);
+
 	kvm_vm_free(vm);
 	free_uffd(test, pt_uffd, data_uffd);
 
@@ -742,7 +761,7 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 static void help(char *name)
 {
 	puts("");
-	printf("usage: %s [-h] [-s mem-type]\n", name);
+	printf("usage: %s [-h] [-s mem-type] [-g nested]\n", name);
 	puts("");
 	guest_modes_help();
 	backing_src_help("-s");
@@ -1115,7 +1134,7 @@ int main(int argc, char *argv[])
 
 	src_type = DEFAULT_VM_MEM_SRC;
 
-	while ((opt = getopt(argc, argv, "hm:s:")) != -1) {
+	while ((opt = getopt(argc, argv, "hm:s:g:")) != -1) {
 		switch (opt) {
 		case 'm':
 			guest_modes_cmdline(optarg);
@@ -1123,12 +1142,18 @@ int main(int argc, char *argv[])
 		case 's':
 			src_type = parse_backing_src_type(optarg);
 			break;
+		case 'g':
+			is_nested = atoi_non_negative("Is Nested", optarg);
+			break;
 		case 'h':
 		default:
 			help(argv[0]);
 			exit(0);
 		}
 	}
+
+	if (is_nested)
+		TEST_REQUIRE(kvm_has_cap(KVM_CAP_ARM_EL2));
 
 	for_each_test_and_guest_mode(src_type);
 	return 0;
