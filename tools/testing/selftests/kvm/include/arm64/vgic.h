@@ -17,6 +17,7 @@
 	index)
 
 int vgic_v3_setup(struct kvm_vm *vm, unsigned int nr_vcpus, uint32_t nr_irqs);
+void vgic_v3_close(int gic_fd);
 
 #define VGIC_MAX_RESERVED	1023
 

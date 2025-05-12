@@ -79,6 +79,14 @@ int vgic_v3_setup(struct kvm_vm *vm, unsigned int nr_vcpus, uint32_t nr_irqs)
 	return gic_fd;
 }
 
+void  vgic_v3_close(int gic_fd)
+{
+	if (gic_fd < 0)
+		return;
+
+	close(gic_fd);
+}
+
 /* should only work for level sensitive interrupts */
 int _kvm_irq_set_level_info(int gic_fd, uint32_t intid, int level)
 {

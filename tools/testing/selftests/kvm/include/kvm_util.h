@@ -65,6 +65,9 @@ struct kvm_vcpu {
 	struct kvm_dirty_gfn *dirty_gfns;
 	uint32_t fetch_index;
 	uint32_t dirty_gfns_count;
+#ifdef __aarch64__
+	bool nested;
+#endif
 };
 
 struct userspace_mem_regions {
