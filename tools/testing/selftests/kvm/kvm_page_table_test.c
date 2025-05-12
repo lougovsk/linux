@@ -20,6 +20,10 @@
 #include "guest_modes.h"
 #include "ucall_common.h"
 
+#ifdef __aarch64__
+#include <nv_util.h>
+#endif
+
 #define TEST_MEM_SLOT_INDEX             1
 
 /* Default size(1GB) of the memory for testing */
@@ -229,7 +233,9 @@ static void *vcpu_worker(void *data)
 struct test_params {
 	uint64_t phys_offset;
 	uint64_t test_mem_size;
+	bool is_nested;
 	enum vm_mem_backing_src_type src_type;
+	int fd;
 };
 
 static struct kvm_vm *pre_init_before_test(enum vm_guest_mode mode, void *arg)
@@ -252,8 +258,17 @@ static struct kvm_vm *pre_init_before_test(enum vm_guest_mode mode, void *arg)
 
 	/* Create a VM with enough guest pages */
 	guest_num_pages = test_mem_size / guest_page_size;
-	vm = __vm_create_with_vcpus(VM_SHAPE(mode), nr_vcpus, guest_num_pages,
+	if (p->is_nested) {
+#ifdef __aarch64__
+		vm = __nv_vm_create_with_vcpus_gic(VM_SHAPE(mode), nr_vcpus,
+				test_args.vcpus, guest_num_pages, &p->fd, guest_code);
+#else
+		TEST_FAIL("Nested Not Supported");
+#endif
+	} else {
+		vm = __vm_create_with_vcpus(VM_SHAPE(mode), nr_vcpus, guest_num_pages,
 				    guest_code, test_args.vcpus);
+	}
 
 	/* Align down GPA of the testing memslot */
 	if (!p->phys_offset)
@@ -345,6 +360,7 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	struct timespec start;
 	struct timespec ts_diff;
 	int ret, i;
+	struct test_params *p =  (struct test_params *)arg;
 
 	/* Create VM with vCPUs and make some pre-initialization */
 	vm = pre_init_before_test(mode, arg);
@@ -414,6 +430,8 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	TEST_ASSERT(ret == 0, "Error in sem_destroy");
 
 	free(vcpu_threads);
+	if (p->is_nested)
+		close(p->fd);
 	kvm_vm_free(vm);
 }
 
@@ -421,7 +439,7 @@ static void help(char *name)
 {
 	puts("");
 	printf("usage: %s [-h] [-p offset] [-m mode] "
-	       "[-b mem-size] [-v vcpus] [-s mem-type]\n", name);
+	       "[-b mem-size] [-v vcpus] [-s mem-type] [-g nv]\n", name);
 	puts("");
 	printf(" -p: specify guest physical test memory offset\n"
 	       "     Warning: a low offset can conflict with the loaded test code.\n");
@@ -430,6 +448,8 @@ static void help(char *name)
 	       "     (default: 1G)\n");
 	printf(" -v: specify the number of vCPUs to run\n"
 	       "     (default: 1)\n");
+	printf(" -g: Enable Nested Virtualization, run guest code as guest hypervisor.\n"
+	       "     (default: Disabled)\n");
 	backing_src_help("-s");
 	puts("");
 }
@@ -440,12 +460,13 @@ int main(int argc, char *argv[])
 	struct test_params p = {
 		.test_mem_size = DEFAULT_TEST_MEM_SIZE,
 		.src_type = DEFAULT_VM_MEM_SRC,
+		.is_nested = false,
 	};
 	int opt;
 
 	guest_modes_append_default();
 
-	while ((opt = getopt(argc, argv, "hp:m:b:v:s:")) != -1) {
+	while ((opt = getopt(argc, argv, "hp:m:b:v:s:g:")) != -1) {
 		switch (opt) {
 		case 'p':
 			p.phys_offset = strtoull(optarg, NULL, 0);
@@ -463,6 +484,9 @@ int main(int argc, char *argv[])
 			break;
 		case 's':
 			p.src_type = parse_backing_src_type(optarg);
+			break;
+		case 'g':
+			p.is_nested = atoi_non_negative("Is Nested", optarg);
 			break;
 		case 'h':
 		default:
