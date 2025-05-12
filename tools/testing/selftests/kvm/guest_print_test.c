@@ -15,6 +15,15 @@
 #include "processor.h"
 #include "ucall_common.h"
 
+#ifdef __aarch64__
+#include "nv_util.h"
+static void pr_usage(const char *name)
+{
+	pr_info("%s [-g nv] -h\n", name);
+	pr_info("  -g:\tEnable Nested Virtualization, run guest code as guest hypervisor (default: Disabled)\n");
+}
+#endif
+
 struct guest_vals {
 	uint64_t a;
 	uint64_t b;
@@ -192,7 +201,30 @@ int main(int argc, char *argv[])
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
 
+#ifdef __aarch64__
+	int opt;
+	bool is_nested = false;
+	int gic_fd;
+
+	while ((opt = getopt(argc, argv, "g:")) != -1) {
+		switch (opt) {
+		case 'g':
+			is_nested = atoi_non_negative("Is Nested", optarg);
+			break;
+		case 'h':
+		default:
+			pr_usage(argv[0]);
+			return 1;
+		}
+	}
+
+	if (is_nested)
+		vm = nv_vm_create_with_vcpus_gic(1, &vcpu, &gic_fd, guest_code);
+	else
+		vm = vm_create_with_one_vcpu(&vcpu, guest_code);
+#else
 	vm = vm_create_with_one_vcpu(&vcpu, guest_code);
+#endif
 
 	test_type_i64(vcpu, -1, -1);
 	test_type_i64(vcpu, -1,  1);
