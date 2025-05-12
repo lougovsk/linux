@@ -11,6 +11,7 @@
 #include <stdint.h>
 
 #include "kvm_util.h"
+#include "nv_util.h"
 #include "processor.h"
 #include "test_util.h"
 #include <linux/bitfield.h>
@@ -150,18 +151,47 @@ static bool vcpu_aarch64_only(struct kvm_vcpu *vcpu)
 	return el0 == ID_AA64PFR0_EL1_EL0_IMP;
 }
 
-int main(void)
+static void help(const char *name)
+{
+	pr_info("Usage: %s [-g enable]\n", name);
+	pr_info("\t-g: Enable Nested Virtualization, run guest code as guest hypervisor (default: Disabled)\n");
+	exit(1);
+}
+
+int main(int argc, char **argv)
 {
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
+	int gic_fd;
+	int opt;
+	bool is_nested = false;
 
-	vm = vm_create_with_one_vcpu(&vcpu, guest_main);
+
+	while ((opt = getopt(argc, argv, "h:g:")) != -1) {
+		switch (opt) {
+		case 'g':
+			is_nested = atoi_non_negative("Is Nested", optarg);
+			break;
+		case 'h':
+		default:
+			help(argv[0]);
+			break;
+		}
+	}
+
+	if (is_nested)
+		vm = nv_vm_create_with_vcpus_gic(1, &vcpu, &gic_fd, guest_main);
+	else
+		vm = vm_create_with_one_vcpu(&vcpu, guest_main);
 
 	TEST_REQUIRE(vcpu_aarch64_only(vcpu));
 
 	test_user_raz_wi(vcpu);
 	test_user_raz_invariant(vcpu);
 	test_guest_raz(vcpu);
+
+	if (is_nested)
+		close(gic_fd);
 
 	kvm_vm_free(vm);
 }
