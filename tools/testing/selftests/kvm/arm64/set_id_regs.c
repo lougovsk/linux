@@ -13,6 +13,7 @@
 #include "kvm_util.h"
 #include "processor.h"
 #include "test_util.h"
+#include "nv_util.h"
 #include <linux/bitfield.h>
 
 enum ftr_type {
@@ -66,6 +67,9 @@ struct test_feature_reg {
 	{						\
 		.type = FTR_END,			\
 	}
+
+static bool is_nested;
+struct kvm_vcpu_init init;
 
 static const struct reg_ftr_bits ftr_id_aa64dfr0_el1[] = {
 	S_REG_FTR_BITS(FTR_LOWER_SAFE, ID_AA64DFR0_EL1, DoubleLock, 0),
@@ -435,6 +439,24 @@ static void test_vm_ftr_id_regs(struct kvm_vcpu *vcpu, bool aarch64_only)
 				continue;
 			}
 
+			if (is_nested) {
+				/* For NV, ID_AA64MMFR0_EL1.TGran4/16/64_2
+				 * are not allowed to write.
+				 */
+				if (reg_id == sys_reg(3, 0, 0, 7, 0)) {
+					switch (ftr_bits[j].shift) {
+					case 40:
+					case 36:
+					case 32:
+						ksft_test_result_skip("%s For NV guests\n",
+								ftr_bits[j].name);
+						continue;
+					default:
+						break;
+					}
+				}
+			}
+
 			/* Make sure the feature field is writable */
 			TEST_ASSERT_EQ(masks[idx] & ftr_bits[j].mask, ftr_bits[j].mask);
 
@@ -658,7 +680,7 @@ static void test_reset_preserves_id_regs(struct kvm_vcpu *vcpu)
 	 * Calls KVM_ARM_VCPU_INIT behind the scenes, which will do an
 	 * architectural reset of the vCPU.
 	 */
-	aarch64_vcpu_setup(vcpu, NULL);
+	aarch64_vcpu_setup(vcpu, &init);
 
 	for (int i = 0; i < ARRAY_SIZE(test_regs); i++)
 		test_assert_id_reg_unchanged(vcpu, test_regs[i].reg);
@@ -673,20 +695,47 @@ static void test_reset_preserves_id_regs(struct kvm_vcpu *vcpu)
 	ksft_test_result_pass("%s\n", __func__);
 }
 
-int main(void)
+static void pr_usage(const char *name)
+{
+	pr_info("%s [-g nv] -h\n", name);
+	pr_info("  -g:\tEnable Nested Virtualization, run guest code as guest hypervisor (default: Disabled)\n");
+}
+
+int main(int argc, char **argv)
 {
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
 	bool aarch64_only;
 	uint64_t val, el0;
 	int test_cnt;
+	int opt, gic_fd;
+
+	while ((opt = getopt(argc, argv, "g:")) != -1) {
+		switch (opt) {
+		case 'g':
+			is_nested = atoi_non_negative("Is Nested", optarg);
+			break;
+		case 'h':
+		default:
+			pr_usage(argv[0]);
+			return 1;
+		}
+	}
 
 	TEST_REQUIRE(kvm_has_cap(KVM_CAP_ARM_SUPPORTED_REG_MASK_RANGES));
 	TEST_REQUIRE(kvm_has_cap(KVM_CAP_ARM_WRITABLE_IMP_ID_REGS));
+	if (is_nested)
+		TEST_REQUIRE(kvm_has_cap(KVM_CAP_ARM_EL2));
 
 	vm = vm_create(1);
+	vm_ioctl(vm, KVM_ARM_PREFERRED_TARGET, &init);
 	vm_enable_cap(vm, KVM_CAP_ARM_WRITABLE_IMP_ID_REGS, 0);
-	vcpu = vm_vcpu_add(vm, 0, guest_code);
+
+	if (is_nested)
+		init_vcpu_nested(&init);
+
+	vcpu = aarch64_vcpu_add(vm, 0, &init, guest_code);
+	gic_fd = vgic_v3_setup(vm, 1, 64);
 
 	/* Check for AARCH64 only system */
 	val = vcpu_get_reg(vcpu, KVM_ARM64_SYS_REG(SYS_ID_AA64PFR0_EL1));
@@ -714,6 +763,8 @@ int main(void)
 
 	test_reset_preserves_id_regs(vcpu);
 
+	if (is_nested)
+		close(gic_fd);
 	kvm_vm_free(vm);
 
 	ksft_finished();
