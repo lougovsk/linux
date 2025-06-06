@@ -15,7 +15,7 @@ class TestRunner:
         self.tests = []
 
         for test_file in test_files:
-            self.tests.append(Selftest(test_file, args.executable))
+            self.tests.append(Selftest(test_file, args.executable, args.timeout))
 
     def _log_result(self, test_result):
         logger.log(test_result.status,

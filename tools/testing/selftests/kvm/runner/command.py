@@ -12,14 +12,16 @@ class Command:
     Returns the exit code, std output and std error of the command.
     """
 
-    def __init__(self, command):
+    def __init__(self, command, timeout):
         self.command = command
+        self.timeout = timeout
 
     def run(self):
         run_args = {
             "universal_newlines": True,
             "shell": True,
             "capture_output": True,
+            "timeout": self.timeout,
         }
 
         proc = subprocess.run(self.command, **run_args)

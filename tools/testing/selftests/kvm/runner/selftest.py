@@ -7,6 +7,7 @@ import command
 import pathlib
 import enum
 import os
+import subprocess
 
 
 class SelftestStatus(enum.IntEnum):
@@ -18,6 +19,7 @@ class SelftestStatus(enum.IntEnum):
     NO_RUN = 22
     SKIPPED = 23
     FAILED = 24
+    TIMED_OUT = 25
 
     def __str__(self):
         return str.__str__(self.name)
@@ -30,7 +32,7 @@ class Selftest:
     Extract the test execution command from test file and executes it.
     """
 
-    def __init__(self, test_path, executable_dir):
+    def __init__(self, test_path, executable_dir, timeout):
         test_command = pathlib.Path(test_path).read_text().strip()
         if not test_command:
             raise ValueError("Empty test command in " + test_path)
@@ -38,7 +40,7 @@ class Selftest:
         test_command = os.path.join(executable_dir, test_command)
         self.exists = os.path.isfile(test_command.split(maxsplit=1)[0])
         self.test_path = test_path
-        self.command = command.Command(test_command)
+        self.command = command.Command(test_command, timeout)
         self.status = SelftestStatus.NO_RUN
         self.stdout = ""
         self.stderr = ""
@@ -48,10 +50,13 @@ class Selftest:
             self.stderr = "File doesn't exists."
             return
 
-        ret, self.stdout, self.stderr = self.command.run()
-        if ret == 0:
-            self.status = SelftestStatus.PASSED
-        elif ret == 4:
-            self.status = SelftestStatus.SKIPPED
-        else:
-            self.status = SelftestStatus.FAILED
+        try:
+            ret, self.stdout, self.stderr = self.command.run()
+            if ret == 0:
+                self.status = SelftestStatus.PASSED
+            elif ret == 4:
+                self.status = SelftestStatus.SKIPPED
+            else:
+                self.status = SelftestStatus.FAILED
+        except subprocess.TimeoutExpired as e:
+            self.status = SelftestStatus.TIMED_OUT
