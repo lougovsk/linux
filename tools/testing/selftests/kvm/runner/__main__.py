@@ -29,6 +29,12 @@ def cli():
                         default=[],
                         help="Run tests in the given directory and all of its sub directories. Provide the space separated paths to add multiple directories.")
 
+    parser.add_argument("-e",
+                        "--executable",
+                        nargs='?',
+                        default=".",
+                        help="Finds the test executables in the given directory. Default is the current directory.")
+
     return parser.parse_args()
 
 
@@ -85,7 +91,7 @@ def main():
     args = cli()
     setup_logging(args)
     test_files = fetch_test_files(args)
-    return TestRunner(test_files).start()
+    return TestRunner(test_files, args).start()
 
 
 if __name__ == "__main__":

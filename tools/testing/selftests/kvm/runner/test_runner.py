@@ -11,11 +11,11 @@ logger = logging.getLogger("runner")
 
 
 class TestRunner:
-    def __init__(self, test_files):
+    def __init__(self, test_files, args):
         self.tests = []
 
         for test_file in test_files:
-            self.tests.append(Selftest(test_file))
+            self.tests.append(Selftest(test_file, args.executable))
 
     def _log_result(self, test_result):
         logger.log(test_result.status,
