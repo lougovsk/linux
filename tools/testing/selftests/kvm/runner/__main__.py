@@ -124,12 +124,20 @@ def cli():
                         help="Print only tests which didn't run."
                         )
 
+    parser.add_argument("--sticky-summary-only",
+                        action="store_true",
+                        default=False,
+                        help="Print only the summary status line.")
+
     return parser.parse_args()
 
 
 def level_filters(args):
     # Levels added here will be printed by logger.
     levels = set()
+
+    if args.sticky_summary_only:
+        return levels
 
     if args.print_passed or args.print_passed_status or args.print_status:
         levels.add(SelftestStatus.PASSED)
