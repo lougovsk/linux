@@ -59,6 +59,11 @@ def cli():
                         type=int,
                         help="Maximum number of tests that can be run concurrently. (Default: 1)")
 
+    parser.add_argument("--print-status",
+                        action="store_true",
+                        default=False,
+                        help="Print only test's status and avoid printing stdout and stderr of the tests")
+
     return parser.parse_args()
 
 
