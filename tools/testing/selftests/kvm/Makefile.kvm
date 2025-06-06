@@ -219,6 +219,14 @@ TEST_GEN_PROGS += $(TEST_GEN_PROGS_$(ARCH))
 TEST_GEN_PROGS_EXTENDED += $(TEST_GEN_PROGS_EXTENDED_$(ARCH))
 LIBKVM += $(LIBKVM_$(ARCH))
 
+$(foreach tc, $(TEST_PROGS), $(shell mkdir -p tests/$(patsubst %.sh,%,$(tc))))
+$(foreach tc, $(TEST_PROGS), \
+	$(shell echo $(tc) > $(patsubst %.sh,tests/%/default.test,$(tc))))
+
+$(foreach tc, $(TEST_GEN_PROGS), $(shell mkdir -p tests/$(tc)))
+$(foreach tc, $(TEST_GEN_PROGS), \
+	$(shell echo $(tc) > $(patsubst %,tests/%/default.test,$(tc))))
+
 OVERRIDE_TARGETS = 1
 
 # lib.mak defines $(OUTPUT), prepends $(OUTPUT)/ to $(TEST_GEN_PROGS), and most
