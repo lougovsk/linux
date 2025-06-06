@@ -18,6 +18,13 @@ class TestRunner:
         self.output_dir = args.output
         self.jobs = args.jobs
         self.print_status = args.print_status
+        self.print_stds = {
+            SelftestStatus.PASSED: args.print_passed,
+            SelftestStatus.FAILED: args.print_failed,
+            SelftestStatus.SKIPPED: args.print_skipped,
+            SelftestStatus.TIMED_OUT: args.print_timed_out,
+            SelftestStatus.NO_RUN: args.print_no_runs
+        }
 
         for test_file in test_files:
             self.tests.append(Selftest(test_file, args.executable,
@@ -30,7 +37,8 @@ class TestRunner:
     def _log_result(self, test_result):
         logger.log(test_result.status,
                    f"[{test_result.status}] {test_result.test_path}")
-        if (self.output_dir is None and self.print_status is False):
+        if (self.output_dir is None and self.print_status is False
+                and self.print_stds.get(test_result.status, True)):
             logger.info("************** STDOUT BEGIN **************")
             logger.info(test_result.stdout)
             logger.info("************** STDOUT END **************")

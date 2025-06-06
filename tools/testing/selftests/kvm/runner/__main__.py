@@ -64,7 +64,113 @@ def cli():
                         default=False,
                         help="Print only test's status and avoid printing stdout and stderr of the tests")
 
+    parser.add_argument("--print-passed",
+                        action="store_true",
+                        default=False,
+                        help="Print passed test's stdout, stderr and status."
+                        )
+
+    parser.add_argument("--print-passed-status",
+                        action="store_true",
+                        default=False,
+                        help="Print only passed test's status."
+                        )
+
+    parser.add_argument("--print-failed",
+                        action="store_true",
+                        default=False,
+                        help="Print failed test's stdout, stderr and status."
+                        )
+
+    parser.add_argument("--print-failed-status",
+                        action="store_true",
+                        default=False,
+                        help="Print only failed test's status."
+                        )
+
+    parser.add_argument("--print-skipped",
+                        action="store_true",
+                        default=False,
+                        help="Print skipped test's stdout, stderr and status."
+                        )
+
+    parser.add_argument("--print-skipped-status",
+                        action="store_true",
+                        default=False,
+                        help="Print only skipped test's status."
+                        )
+
+    parser.add_argument("--print-timed-out",
+                        action="store_true",
+                        default=False,
+                        help="Print timed out test's stdout, stderr and status."
+                        )
+
+    parser.add_argument("--print-timed-out-status",
+                        action="store_true",
+                        default=False,
+                        help="Print only timed out test's status."
+                        )
+
+    parser.add_argument("--print-no-runs",
+                        action="store_true",
+                        default=False,
+                        help="Print stdout, stderr and status for tests which didn't run."
+                        )
+
+    parser.add_argument("--print-no-runs-status",
+                        action="store_true",
+                        default=False,
+                        help="Print only tests which didn't run."
+                        )
+
     return parser.parse_args()
+
+
+def level_filters(args):
+    # Levels added here will be printed by logger.
+    levels = set()
+
+    if args.print_passed or args.print_passed_status or args.print_status:
+        levels.add(SelftestStatus.PASSED)
+
+    if args.print_failed or args.print_failed_status or args.print_status:
+        levels.add(SelftestStatus.FAILED)
+
+    if args.print_skipped or args.print_skipped_status or args.print_status:
+        levels.add(SelftestStatus.SKIPPED)
+
+    if args.print_timed_out or args.print_timed_out_status or args.print_status:
+        levels.add(SelftestStatus.TIMED_OUT)
+
+    if args.print_no_runs or args.print_no_runs_status or args.print_status:
+        levels.add(SelftestStatus.NO_RUN)
+
+    # Nothing set explicitly, enable all.
+    if not levels:
+        args.print_passed = True
+        levels.add(SelftestStatus.PASSED)
+
+        args.print_failed = True
+        levels.add(SelftestStatus.FAILED)
+
+        args.print_skipped = True
+        levels.add(SelftestStatus.SKIPPED)
+
+        args.print_timed_out = True
+        levels.add(SelftestStatus.TIMED_OUT)
+
+        args.print_no_runs = True
+        levels.add(SelftestStatus.NO_RUN)
+
+    levels.add(logging.NOTSET)
+    levels.add(logging.DEBUG)
+    levels.add(logging.INFO)
+    levels.add(logging.WARN)
+    levels.add(logging.ERROR)
+    levels.add(logging.CRITICAL)
+
+    return levels
 
 
 def setup_logging(args):
@@ -91,6 +197,13 @@ def setup_logging(args):
             return (self.COLORS.get(record.levelno, "") +
                     super().format(record) + self.reset)
 
+    class LevelFilter:
+        def __init__(self, levels):
+            self.levels = levels
+
+        def filter(self, record):
+            return record.levelno in self.levels
+
     logger = logging.getLogger("runner")
     logger.setLevel(logging.INFO)
 
@@ -102,6 +215,7 @@ def setup_logging(args):
     ch = logging.StreamHandler()
     ch_formatter = TerminalColorFormatter(**formatter_args)
     ch.setFormatter(ch_formatter)
+    ch.addFilter(LevelFilter(level_filters(args)))
     logger.addHandler(ch)
 
     if args.output != None:
