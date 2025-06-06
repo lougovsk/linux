@@ -129,6 +129,12 @@ def cli():
                         default=False,
                         help="Print only the summary status line.")
 
+    parser.add_argument("-q",
+                        "--quiet",
+                        action="store_true",
+                        default=False,
+                        help="Suppress all of the output to terminal")
+
     return parser.parse_args()
 
 
@@ -136,7 +142,7 @@ def level_filters(args):
     # Levels added here will be printed by logger.
     levels = set()
 
-    if args.sticky_summary_only:
+    if args.sticky_summary_only or args.quiet:
         return levels
 
     if args.print_passed or args.print_passed_status or args.print_status:

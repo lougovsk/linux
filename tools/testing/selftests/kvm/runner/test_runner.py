@@ -18,6 +18,7 @@ class TestRunner:
         self.status = {x: 0 for x in SelftestStatus}
         self.output_dir = args.output
         self.jobs = args.jobs
+        self.quiet = args.quiet
         self.print_status = args.print_status
         self.print_stds = {
             SelftestStatus.PASSED: args.print_passed,
@@ -35,17 +36,21 @@ class TestRunner:
         test.run()
         return test
 
+    def _print(self, text, end="\n"):
+        if not self.quiet:
+            print(text, end=end)
+
     def _sticky_update(self):
-        print(f"\r\033[1mTotal: {self.tests_ran}/{len(self.tests)}" \
-                f"\033[32;1m Passed: {self.status[SelftestStatus.PASSED]}" \
-                f"\033[31;1m Failed: {self.status[SelftestStatus.FAILED]}" \
-                f"\033[33;1m Skipped: {self.status[SelftestStatus.SKIPPED]}"\
-                f"\033[91;1m Timed Out: {self.status[SelftestStatus.TIMED_OUT]}"\
-                f"\033[34;1m No Run: {self.status[SelftestStatus.NO_RUN]}\033[0m", end="\r")
+        self._print(f"\r\033[1mTotal: {self.tests_ran}/{len(self.tests)}"
+                    f"\033[32;1m Passed: {self.status[SelftestStatus.PASSED]}"
+                    f"\033[31;1m Failed: {self.status[SelftestStatus.FAILED]}"
+                    f"\033[33;1m Skipped: {self.status[SelftestStatus.SKIPPED]}"
+                    f"\033[91;1m Timed Out: {self.status[SelftestStatus.TIMED_OUT]}"
+                    f"\033[34;1m No Run: {self.status[SelftestStatus.NO_RUN]}\033[0m", end="\r")
 
     def _log_result(self, test_result):
         # Clear the status line
-        print("\033[2K", end="\r")
+        self._print("\033[2K", end="\r")
         logger.log(test_result.status,
                    f"[{test_result.status}] {test_result.test_path}")
         if (self.output_dir is None and self.print_status is False
@@ -79,5 +84,5 @@ class TestRunner:
                                                SelftestStatus.NO_RUN,
                                                SelftestStatus.SKIPPED]):
                     ret = 1
-        print("\n")
+        self._print("")
         return ret
