@@ -13,19 +13,22 @@ logger = logging.getLogger("runner")
 class TestRunner:
     def __init__(self, test_files, args):
         self.tests = []
+        self.output_dir = args.output
 
         for test_file in test_files:
-            self.tests.append(Selftest(test_file, args.executable, args.timeout))
+            self.tests.append(Selftest(test_file, args.executable,
+                                       args.timeout, args.output))
 
     def _log_result(self, test_result):
         logger.log(test_result.status,
                    f"[{test_result.status}] {test_result.test_path}")
-        logger.info("************** STDOUT BEGIN **************")
-        logger.info(test_result.stdout)
-        logger.info("************** STDOUT END **************")
-        logger.info("************** STDERR BEGIN **************")
-        logger.info(test_result.stderr)
-        logger.info("************** STDERR END **************")
+        if (self.output_dir is None):
+            logger.info("************** STDOUT BEGIN **************")
+            logger.info(test_result.stdout)
+            logger.info("************** STDOUT END **************")
+            logger.info("************** STDERR BEGIN **************")
+            logger.info(test_result.stderr)
+            logger.info("************** STDERR END **************")
 
     def start(self):
         ret = 0
