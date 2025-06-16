@@ -159,7 +159,12 @@ static inline void __sysreg_save_el2_return_state(struct kvm_cpu_context *ctxt)
 	if (!has_vhe() && ctxt->__hyp_running_vcpu)
 		ctxt->regs.pstate	= read_sysreg_el2(SYS_SPSR);
 
-	if (cpus_have_final_cap(ARM64_HAS_RAS_EXTN))
+	if (!cpus_have_final_cap(ARM64_HAS_RAS_EXTN))
+		return;
+
+	if (vserror_state_is_nested(ctxt_to_vcpu(ctxt)))
+		ctxt_sys_reg(ctxt, VDISR_EL2) = read_sysreg_s(SYS_VDISR_EL2);
+	else
 		ctxt_sys_reg(ctxt, DISR_EL1) = read_sysreg_s(SYS_VDISR_EL2);
 }
 
@@ -293,7 +298,12 @@ static inline void __sysreg_restore_el2_return_state(struct kvm_cpu_context *ctx
 	write_sysreg_el2(ctxt->regs.pc,			SYS_ELR);
 	write_sysreg_el2(pstate,			SYS_SPSR);
 
-	if (cpus_have_final_cap(ARM64_HAS_RAS_EXTN))
+	if (!cpus_have_final_cap(ARM64_HAS_RAS_EXTN))
+		return;
+
+	if (vserror_state_is_nested(ctxt_to_vcpu(ctxt)))
+		write_sysreg_s(ctxt_sys_reg(ctxt, VDISR_EL2), SYS_VDISR_EL2);
+	else
 		write_sysreg_s(ctxt_sys_reg(ctxt, DISR_EL1), SYS_VDISR_EL2);
 }
 
