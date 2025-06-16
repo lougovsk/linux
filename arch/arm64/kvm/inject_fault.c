@@ -209,7 +209,14 @@ static void __kvm_inject_sea(struct kvm_vcpu *vcpu, bool iabt, u64 addr)
 
 static bool kvm_sea_target_is_el2(struct kvm_vcpu *vcpu)
 {
-	return __vcpu_sys_reg(vcpu, HCR_EL2) & (HCR_TGE | HCR_TEA);
+	if (__vcpu_sys_reg(vcpu, HCR_EL2) & (HCR_TGE | HCR_TEA))
+		return true;
+
+	if (!vcpu_mode_priv(vcpu))
+		return false;
+
+	return (*vcpu_cpsr(vcpu) & PSR_A_BIT) &&
+	       (__vcpu_sys_reg(vcpu, HCRX_EL2) & HCRX_EL2_TMEA);
 }
 
 int kvm_inject_sea(struct kvm_vcpu *vcpu, bool iabt, u64 addr)
