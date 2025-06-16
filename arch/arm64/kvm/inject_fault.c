@@ -97,6 +97,11 @@ static bool effective_sctlr2_ease(struct kvm_vcpu *vcpu)
 	return __effective_sctlr2_bit(vcpu, SCTLR2_EL1_EASE_SHIFT);
 }
 
+static bool effective_sctlr2_nmea(struct kvm_vcpu *vcpu)
+{
+	return __effective_sctlr2_bit(vcpu, SCTLR2_EL1_NMEA_SHIFT);
+}
+
 static void inject_abt64(struct kvm_vcpu *vcpu, bool is_iabt, unsigned long addr)
 {
 	unsigned long cpsr = *vcpu_cpsr(vcpu);
@@ -258,14 +263,29 @@ void kvm_inject_undefined(struct kvm_vcpu *vcpu)
 		inject_undef64(vcpu);
 }
 
+static bool serror_is_masked(struct kvm_vcpu *vcpu)
+{
+	bool masked = *vcpu_cpsr(vcpu) & PSR_A_BIT;
+
+	if (!vcpu_mode_priv(vcpu))
+		masked |= effective_sctlr2_nmea(vcpu);
+
+	return masked;
+}
+
 static bool kvm_serror_target_is_el2(struct kvm_vcpu *vcpu)
 {
-	return is_hyp_ctxt(vcpu) || vcpu_el2_amo_is_set(vcpu);
+	if (is_hyp_ctxt(vcpu) || vcpu_el2_amo_is_set(vcpu))
+		return true;
+
+	return serror_is_masked(vcpu) &&
+	       (__vcpu_sys_reg(vcpu, HCRX_EL2) & HCRX_EL2_TMEA);
 }
 
 static bool kvm_serror_undeliverable_at_el2(struct kvm_vcpu *vcpu)
 {
-	return !(vcpu_el2_tge_is_set(vcpu) || vcpu_el2_amo_is_set(vcpu));
+	return !(vcpu_el2_tge_is_set(vcpu) || vcpu_el2_amo_is_set(vcpu) ||
+		 effective_sctlr2_nmea(vcpu));
 }
 
 int kvm_inject_serror_esr(struct kvm_vcpu *vcpu, u64 esr)
@@ -278,6 +298,18 @@ int kvm_inject_serror_esr(struct kvm_vcpu *vcpu, u64 esr)
 	if (vcpu_is_el2(vcpu) && kvm_serror_undeliverable_at_el2(vcpu)) {
 		vcpu_set_vsesr(vcpu, esr);
 		vcpu_set_flag(vcpu, NESTED_SERROR_PENDING);
+		return 1;
+	}
+
+	/*
+	 * Emulate the exception entry if SErrors are unmasked. This is useful if
+	 * the vCPU is in a nested context w/ vSErrors enabled then we've already
+	 * delegated he hardware vSError context (i.e. HCR_EL2.VSE, VSESR_EL2,
+	 * VDISR_EL2) to the guest hypervisor.
+	 */
+	if (!serror_is_masked(vcpu)) {
+		pend_serror_exception(vcpu);
+		vcpu_write_sys_reg(vcpu, esr, exception_esr_elx(vcpu));
 		return 1;
 	}
 
