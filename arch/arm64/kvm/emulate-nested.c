@@ -2714,6 +2714,9 @@ static void kvm_inject_el2_exception(struct kvm_vcpu *vcpu, u64 esr_el2,
 	case except_type_irq:
 		kvm_pend_exception(vcpu, EXCEPT_AA64_EL2_IRQ);
 		break;
+	case except_type_serror:
+		kvm_pend_exception(vcpu, EXCEPT_AA64_EL2_SERR);
+		break;
 	default:
 		WARN_ONCE(1, "Unsupported EL2 exception injection %d\n", type);
 	}
@@ -2819,4 +2822,9 @@ int kvm_inject_nested_sea(struct kvm_vcpu *vcpu, bool iabt, u64 addr)
 	esr |= ESR_ELx_FSC_EXTABT | ESR_ELx_IL;
 
 	return kvm_inject_s2_fault(vcpu, esr);
+}
+
+int kvm_inject_nested_serror(struct kvm_vcpu *vcpu, u64 esr)
+{
+	return kvm_inject_nested(vcpu, esr, except_type_serror);
 }
