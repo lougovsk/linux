@@ -3540,6 +3540,9 @@ static bool handle_at_s1e2(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 
 	__kvm_at_s1e2(vcpu, op, p->regval);
 
+	/* No context switch happened, so we need to update PAR_EL1 manually */
+	write_sysreg(vcpu_read_sys_reg(vcpu, PAR_EL1), par_el1);
+
 	return true;
 }
 
@@ -3549,6 +3552,9 @@ static bool handle_at_s12(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 	u32 op = sys_insn(p->Op0, p->Op1, p->CRn, p->CRm, p->Op2);
 
 	__kvm_at_s12(vcpu, op, p->regval);
+
+	/* No context switch happened, so we need to update PAR_EL1 manually */
+	write_sysreg(vcpu_read_sys_reg(vcpu, PAR_EL1), par_el1);
 
 	return true;
 }
