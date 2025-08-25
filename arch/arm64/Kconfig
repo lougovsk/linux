@@ -1270,6 +1270,18 @@ config HISILICON_ERRATUM_162100801
 
 	  If unsure, say Y.
 
+config HISILICON_ERRATUM_162200802
+	bool "Hip{10, 10C} 162200802 erratum support"
+	default y
+	help
+	  For GICv4.0 of Hip10 and Hip10C, it has a soc bug with vPE schedule:
+	  when multiple vPEs are sending vpe schedule/deschedule commands
+	  concurrently and repeatly, some vPE schedule command may not be
+	  scheduled, and it will cause the command timeout. To avoid the
+	  issue, limit the number of vLPI to 4096 for virtual machine.
+
+	  If unsure, say Y.
+
 config QCOM_FALKOR_ERRATUM_1003
 	bool "Falkor E1003: Incorrect translation due to ASID change"
 	default y

@@ -564,6 +564,14 @@ static const struct midr_range erratum_ac04_cpu_23_list[] = {
 };
 #endif
 
+#ifdef CONFIG_HISILICON_ERRATUM_162200802
+static const struct midr_range erratum_hisi_162200802[] = {
+	MIDR_ALL_VERSIONS(MIDR_HISI_HIP10),
+	MIDR_ALL_VERSIONS(MIDR_HISI_HIP10C),
+	{},
+};
+#endif
+
 const struct arm64_cpu_capabilities arm64_errata[] = {
 #ifdef CONFIG_ARM64_WORKAROUND_CLEAN_CACHE
 	{
@@ -905,6 +913,13 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.matches = has_impdef_pmuv3,
 		.cpu_enable = cpu_enable_impdef_pmuv3_traps,
 	},
+#ifdef CONFIG_HISILICON_ERRATUM_162200802
+	{
+		.desc = "HiSilicon erratum 162200802",
+		.capability = ARM64_WORKAROUND_HISI_162200802,
+		ERRATA_MIDR_RANGE_LIST(erratum_hisi_162200802),
+	},
+#endif
 	{
 	}
 };

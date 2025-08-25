@@ -389,7 +389,14 @@ int vgic_init(struct kvm *kvm)
 	/* freeze the number of spis */
 	if (!dist->nr_spis)
 		dist->nr_spis = VGIC_NR_IRQS_LEGACY - VGIC_NR_PRIVATE_IRQS;
-	dist->nr_lpis = 0;
+
+	if (cpus_have_final_cap(ARM64_WORKAROUND_HISI_162200802) &&
+	    kvm_vgic_global_state.has_gicv4 &&
+	    !kvm_vgic_global_state.has_gicv4_1)
+		dist->nr_lpis = 4096;
+	else
+		dist->nr_lpis = 0;
+
 
 	ret = kvm_vgic_dist_init(kvm, dist->nr_spis);
 	if (ret)

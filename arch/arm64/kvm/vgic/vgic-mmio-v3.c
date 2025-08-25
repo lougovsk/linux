@@ -180,6 +180,12 @@ static int vgic_mmio_uaccess_write_v3_misc(struct kvm_vcpu *vcpu,
 			return -EINVAL;
 		if (GICD_TYPER_NUM_LPIS(val) > INTERRUPT_ID_BITS_ITS)
 			return -EINVAL;
+		/* Limit the number of vlpis to 4096 */
+		if (cpus_have_final_cap(ARM64_WORKAROUND_HISI_162200802) &&
+		    kvm_vgic_global_state.has_gicv4 &&
+		    !kvm_vgic_global_state.has_gicv4_1 &&
+		    GICD_TYPER_NUM_LPIS(val) != 12)
+			return -EINVAL;
 
 		dist->nr_lpis = 2 ^ GICD_TYPER_NUM_LPIS(val);
 		return 0;
