@@ -968,6 +968,38 @@ static void test_v3_sysregs(void)
 	kvm_vm_free(vm);
 }
 
+static void test_v3_num_lpis(void)
+{
+	struct kvm_vcpu *vcpus[NR_VCPUS];
+	u32 num_lpis;
+	struct vm_gic vm;
+	u32 typer;
+	int ret;
+
+	vm = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS, vcpus);
+	kvm_create_device(vm.vm, KVM_DEV_TYPE_ARM_VGIC_ITS);
+
+	kvm_device_attr_get(vm.gic_fd, KVM_DEV_ARM_VGIC_GRP_DIST_REGS,
+			    GICD_TYPER, &typer);
+	num_lpis = typer & GICD_TYPER_NUM_LPIS_MASK;
+	TEST_ASSERT(!num_lpis, "Default value of GICD.num_LPIs is not 0");
+
+	typer |= 10 << GICD_TYPER_NUM_LPIS_SHIFT;
+	ret = __kvm_device_attr_set(vm.gic_fd, KVM_DEV_ARM_VGIC_GRP_DIST_REGS,
+				    GICD_TYPER, &typer);
+	TEST_ASSERT(!ret, KVM_IOCTL_ERROR(KVM_DEVICE_ATTR_SET, ret));
+
+	kvm_device_attr_set(vm.gic_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
+			    KVM_DEV_ARM_VGIC_CTRL_INIT, NULL);
+
+	ret = __kvm_device_attr_set(vm.gic_fd, KVM_DEV_ARM_VGIC_GRP_DIST_REGS,
+				    GICD_TYPER, &typer);
+	TEST_ASSERT(ret && errno == EBUSY,
+		    "Changed GICD.num_LPIs after initializing the VGIC");
+
+	vm_gic_destroy(&vm);
+}
+
 void run_tests(uint32_t gic_dev_type)
 {
 	test_vcpus_then_vgic(gic_dev_type);
@@ -985,6 +1017,7 @@ void run_tests(uint32_t gic_dev_type)
 		test_v3_its_region();
 		test_v3_sysregs();
 		test_v3_nassgicap();
+		test_v3_num_lpis();
 	}
 }
 
