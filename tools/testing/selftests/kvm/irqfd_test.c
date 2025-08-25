@@ -8,7 +8,11 @@
 #include <stdint.h>
 #include <sys/sysinfo.h>
 
+#include "processor.h"
 #include "kvm_util.h"
+#ifdef __aarch64__
+#include "vgic.h"
+#endif
 
 static struct kvm_vm *vm1;
 static struct kvm_vm *vm2;
@@ -86,14 +90,30 @@ static void juggle_eventfd_primary(struct kvm_vm *vm, int eventfd)
 	kvm_irqfd(vm, GSI_BASE_PRIMARY + 1, eventfd, KVM_IRQFD_FLAG_DEASSIGN);
 }
 
+static struct kvm_vm *test_vm_create(void)
+{
+#ifdef __aarch64__
+	struct kvm_vm *vm;
+	struct kvm_vcpu *vcpu;
+	int gic_fd;
+
+	vm = vm_create_with_one_vcpu(&vcpu, NULL);
+	gic_fd = vgic_v3_setup(vm, 1, 64);
+	__TEST_REQUIRE(gic_fd >= 0, "Failed to create vgic-v3");
+
+	return vm;
+#endif
+	return vm_create(1);
+}
+
 int main(int argc, char *argv[])
 {
 	pthread_t racing_thread;
 	int r, i;
 
 	/* Create "full" VMs, as KVM_IRQFD requires an in-kernel IRQ chip. */
-	vm1 = vm_create(1);
-	vm2 = vm_create(1);
+	vm1 = test_vm_create();
+	vm2 = test_vm_create();
 
 	WRITE_ONCE(__eventfd, kvm_new_eventfd());
 
