@@ -127,6 +127,7 @@ Groups:
 
       * GICD_IIDR.Revision
       * GICD_TYPER2.nASSGIcap
+      * GICD_TYPER.num_LPIs
 
     GICD_IIDR.Revision is updated when the KVM implementation is changed in a
     way directly observable by the guest or userspace.  Userspace should read
@@ -140,6 +141,11 @@ Groups:
     without an active state. At VGIC creation the field resets to the
     maximum capability of the system. Userspace is expected to read the field
     to determine the supported value(s) before writing to the field.
+
+
+    GICD_TYPER.num_LPIs allows userspace to control the maximum value of
+    supported LPIs. At VGIC creation the field resets to 0 which indicates
+    maximum value of supported LPIs is defined by GICD.IDbits.
 
 
     The GICD_STATUSR and GICR_STATUSR registers are architecturally defined such
