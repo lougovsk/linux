@@ -389,6 +389,7 @@ int vgic_init(struct kvm *kvm)
 	/* freeze the number of spis */
 	if (!dist->nr_spis)
 		dist->nr_spis = VGIC_NR_IRQS_LEGACY - VGIC_NR_PRIVATE_IRQS;
+	dist->nr_lpis = 0;
 
 	ret = kvm_vgic_dist_init(kvm, dist->nr_spis);
 	if (ret)
@@ -428,6 +429,7 @@ static void kvm_vgic_dist_destroy(struct kvm *kvm)
 	kfree(dist->spis);
 	dist->spis = NULL;
 	dist->nr_spis = 0;
+	dist->nr_lpis = 0;
 	dist->vgic_dist_base = VGIC_ADDR_UNDEF;
 
 	if (dist->vgic_model == KVM_DEV_TYPE_ARM_VGIC_V3) {

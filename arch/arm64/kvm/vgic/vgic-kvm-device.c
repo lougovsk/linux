@@ -514,6 +514,7 @@ static bool reg_allowed_pre_init(struct kvm_device_attr *attr)
 		return false;
 
 	switch (attr->attr & KVM_DEV_ARM_VGIC_OFFSET_MASK) {
+	case GICD_TYPER:
 	case GICD_IIDR:
 	case GICD_TYPER2:
 		return true;

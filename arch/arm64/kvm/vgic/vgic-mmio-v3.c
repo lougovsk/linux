@@ -90,6 +90,8 @@ static unsigned long vgic_mmio_read_v3_misc(struct kvm_vcpu *vcpu,
 		if (vgic_has_its(vcpu->kvm)) {
 			value |= (INTERRUPT_ID_BITS_ITS - 1) << 19;
 			value |= GICD_TYPER_LPIS;
+			if (vgic->nr_lpis)
+				value |= (ilog2(vgic->nr_lpis) - 1) << 11;
 		} else {
 			value |= (INTERRUPT_ID_BITS_SPIS - 1) << 19;
 		}
@@ -167,6 +169,20 @@ static int vgic_mmio_uaccess_write_v3_misc(struct kvm_vcpu *vcpu,
 	u32 reg;
 
 	switch (addr & 0x0c) {
+	case GICD_TYPER:
+		reg = vgic_mmio_read_v3_misc(vcpu, addr, len);
+
+		if (reg == val)
+			return 0;
+		if (vgic_initialized(vcpu->kvm))
+			return -EBUSY;
+		if ((reg ^ val) & ~GICD_TYPER_NUM_LPIS_MASK)
+			return -EINVAL;
+		if (GICD_TYPER_NUM_LPIS(val) > INTERRUPT_ID_BITS_ITS)
+			return -EINVAL;
+
+		dist->nr_lpis = 2 ^ GICD_TYPER_NUM_LPIS(val);
+		return 0;
 	case GICD_TYPER2:
 		reg = vgic_mmio_read_v3_misc(vcpu, addr, len);
 

@@ -303,6 +303,7 @@ struct vgic_dist {
 	 * else.
 	 */
 	struct its_vm		its_vm;
+	int			nr_lpis;
 };
 
 struct vgic_v2_cpu_if {

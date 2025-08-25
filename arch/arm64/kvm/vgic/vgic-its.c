@@ -377,9 +377,14 @@ static void update_affinity_collection(struct kvm *kvm, struct vgic_its *its,
 	}
 }
 
-static u32 max_lpis_propbaser(u64 propbaser)
+static u32 max_lpis_propbaser(struct vgic_dist *dist)
 {
+	u64 propbaser = dist->propbaser;
 	int nr_idbits = (propbaser & 0x1f) + 1;
+	int nr_lpis = dist->nr_lpis;
+
+	if (nr_lpis)
+		return min(8192 + nr_lpis, 1 << nr_idbits);
 
 	return 1U << min(nr_idbits, INTERRUPT_ID_BITS_ITS);
 }
@@ -1047,7 +1052,7 @@ static int vgic_its_cmd_handle_mapi(struct kvm *kvm, struct vgic_its *its,
 	else
 		lpi_nr = event_id;
 	if (lpi_nr < GIC_LPI_OFFSET ||
-	    lpi_nr >= max_lpis_propbaser(kvm->arch.vgic.propbaser))
+	    lpi_nr >= max_lpis_propbaser(&kvm->arch.vgic))
 		return E_ITS_MAPTI_PHYSICALID_OOR;
 
 	/* If there is an existing mapping, behavior is UNPREDICTABLE. */
