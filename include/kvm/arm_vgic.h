@@ -139,7 +139,11 @@ struct vgic_irq {
 	bool pending_latch;		/* The pending latch state used to calculate
 					 * the pending state for both level
 					 * and edge triggered IRQs. */
-	bool active;			/* not used for LPIs */
+	union {
+		bool active;		/* not used for LPIs */
+		bool pending_release;	/* LPI pending a release */
+	};
+
 	bool enabled;
 	bool hw;			/* Tied to HW IRQ */
 	refcount_t refcount;		/* Used for LPIs */
