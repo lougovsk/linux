@@ -1128,7 +1128,7 @@ static const
 struct reg_to_feat_map sctlr_el1_feat_map = FEAT_MAP(SCTLR_EL1, FEAT_AA64EL1,
 						    sctlr_el1_bit_feat_map);
 
-static const struct reg_bits_to_feat_map mdcr_el2_feat_map[] = {
+static const struct reg_bits_to_feat_map mdcr_el2_bit_feat_map[] = {
 	NEEDS_FEAT(MDCR_EL2_EBWE, FEAT_Debugv8p9),
 	NEEDS_FEAT(MDCR_EL2_TDOSA, FEAT_DoubleLock),
 	NEEDS_FEAT(MDCR_EL2_PMEE, FEAT_EBEP),
@@ -1158,6 +1158,10 @@ static const struct reg_bits_to_feat_map mdcr_el2_feat_map[] = {
 		   MDCR_EL2_TDRA,
 		   FEAT_AA64EL1),
 };
+
+static const
+struct reg_to_feat_map mdcr_el2_feat_map = FEAT_MAP(MDCR_EL2, FEAT_AA64EL2,
+						    mdcr_el2_bit_feat_map);
 
 static void __init check_feat_map(const struct reg_bits_to_feat_map *map,
 				  int map_size, u64 res0, const char *str)
@@ -1201,8 +1205,7 @@ void __init check_feature_map(void)
 	check_reg_feat_map(&sctlr2_feat_map);
 	check_reg_feat_map(&tcr2_el2_feat_map);
 	check_reg_feat_map(&sctlr_el1_feat_map);
-	check_feat_map(mdcr_el2_feat_map, ARRAY_SIZE(mdcr_el2_feat_map),
-		       MDCR_EL2_RES0, "MDCR_EL2");
+	check_reg_feat_map(&mdcr_el2_feat_map);
 }
 
 static bool idreg_feat_match(struct kvm *kvm, const struct reg_bits_to_feat_map *map)
@@ -1414,8 +1417,7 @@ void get_reg_fixed_bits(struct kvm *kvm, enum vcpu_sysreg reg, u64 *res0, u64 *r
 		*res1 = SCTLR_EL1_RES1;
 		break;
 	case MDCR_EL2:
-		*res0 = compute_res0_bits(kvm, mdcr_el2_feat_map,
-					  ARRAY_SIZE(mdcr_el2_feat_map), 0, 0);
+		*res0 = compute_reg_res0_bits(kvm, &mdcr_el2_feat_map, 0, 0);
 		*res0 |= MDCR_EL2_RES0;
 		*res1 = MDCR_EL2_RES1;
 		break;
