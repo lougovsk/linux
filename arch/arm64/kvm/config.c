@@ -187,6 +187,7 @@ struct reg_to_feat_map {
 #define FEAT_FGT		ID_AA64MMFR0_EL1, FGT, IMP
 #define FEAT_FGT2		ID_AA64MMFR0_EL1, FGT, FGT2
 #define FEAT_MTPMU		ID_AA64DFR0_EL1, MTPMU, IMP
+#define FEAT_HCX		ID_AA64MMFR1_EL1, HCX, IMP
 
 static bool not_feat_aa64el3(struct kvm *kvm)
 {
@@ -893,7 +894,7 @@ struct reg_to_feat_map hdfgwtr2_feat_map = FEAT_MAP_FGT(hdfgwtr2_masks,
 							hdfgwtr2_bit_feat_map,
 							FEAT_FGT2);
 
-static const struct reg_bits_to_feat_map hcrx_feat_map[] = {
+static const struct reg_bits_to_feat_map hcrx_bit_feat_map[] = {
 	NEEDS_FEAT(HCRX_EL2_PACMEn, feat_pauth_lr),
 	NEEDS_FEAT(HCRX_EL2_EnFPM, FEAT_FPMR),
 	NEEDS_FEAT(HCRX_EL2_GCSEn, FEAT_GCS),
@@ -921,6 +922,10 @@ static const struct reg_bits_to_feat_map hcrx_feat_map[] = {
 	NEEDS_FEAT(HCRX_EL2_EnALS, FEAT_LS64),
 	NEEDS_FEAT(HCRX_EL2_EnAS0, FEAT_LS64_ACCDATA),
 };
+
+static const
+struct reg_to_feat_map hcrx_feat_map = FEAT_MAP(__HCRX_EL2, FEAT_HCX,
+						hcrx_bit_feat_map);
 
 static const struct reg_bits_to_feat_map hcr_feat_map[] = {
 	NEEDS_FEAT(HCR_EL2_TID0, FEAT_AA32EL0),
@@ -1174,8 +1179,7 @@ void __init check_feature_map(void)
 	check_reg_feat_map(&hfgitr2_feat_map);
 	check_reg_feat_map(&hdfgrtr2_feat_map);
 	check_reg_feat_map(&hdfgwtr2_feat_map);
-	check_feat_map(hcrx_feat_map, ARRAY_SIZE(hcrx_feat_map),
-		       __HCRX_EL2_RES0, "HCRX_EL2");
+	check_reg_feat_map(&hcrx_feat_map);
 	check_feat_map(hcr_feat_map, ARRAY_SIZE(hcr_feat_map),
 		       HCR_EL2_RES0, "HCR_EL2");
 	check_feat_map(sctlr2_feat_map, ARRAY_SIZE(sctlr2_feat_map),
@@ -1376,9 +1380,7 @@ void get_reg_fixed_bits(struct kvm *kvm, enum vcpu_sysreg reg, u64 *res0, u64 *r
 		*res1 = HDFGWTR2_EL2_RES1;
 		break;
 	case HCRX_EL2:
-		*res0 = compute_res0_bits(kvm, hcrx_feat_map,
-					  ARRAY_SIZE(hcrx_feat_map), 0, 0);
-		*res0 |= __HCRX_EL2_RES0;
+		*res0 = compute_reg_res0_bits(kvm, &hcrx_feat_map, 0, 0);
 		*res1 = __HCRX_EL2_RES1;
 		break;
 	case HCR_EL2:
