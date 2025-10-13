@@ -2567,6 +2567,12 @@ static bool bad_redir_trap(struct kvm_vcpu *vcpu,
 	.val = mask,				\
 }
 
+#define AA32_ID_WRITABLE(name, mask) {		\
+	ID_DESC(name),				\
+	.visibility = aa32_id_visibility,	\
+	.val = mask,				\
+}
+
 /* sys_reg_desc initialiser for cpufeature ID registers that need filtering */
 #define ID_FILTERED(sysreg, name, mask) {	\
 	ID_DESC(sysreg),				\
@@ -3079,7 +3085,7 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	/* AArch64 mappings of the AArch32 ID registers */
 	/* CRm=1 */
 	AA32_ID_SANITISED(ID_PFR0_EL1),
-	AA32_ID_SANITISED(ID_PFR1_EL1),
+	AA32_ID_WRITABLE(ID_PFR1_EL1, ID_PFR1_EL1_GIC),
 	{ SYS_DESC(SYS_ID_DFR0_EL1),
 	  .access = access_id_reg,
 	  .get_user = get_id_reg,
