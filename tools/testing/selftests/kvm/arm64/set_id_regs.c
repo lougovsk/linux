@@ -652,6 +652,8 @@ static void test_guest_reg_read(struct kvm_vcpu *vcpu)
 			TEST_FAIL("Unexpected ucall: %lu", uc.cmd);
 		}
 	}
+
+	ksft_test_result_pass("%s\n", __func__);
 }
 
 /* Politely lifted from arch/arm64/include/asm/cache.h */
@@ -783,7 +785,7 @@ int main(void)
 
 	ksft_print_header();
 
-	test_cnt = 3 + MPAM_IDREG_TEST + MTE_IDREG_TEST;
+	test_cnt = 4 + MPAM_IDREG_TEST + MTE_IDREG_TEST;
 	for (i = 0; i < ARRAY_SIZE(test_regs); i++)
 		for (j = 0; test_regs[i].ftr_bits[j].type != FTR_END; j++)
 			test_cnt++;
