@@ -179,6 +179,8 @@
 #define KERNEL_HWCAP_MTE_FAR		__khwcap3_feature(MTE_FAR)
 #define KERNEL_HWCAP_MTE_STORE_ONLY	__khwcap3_feature(MTE_STORE_ONLY)
 #define KERNEL_HWCAP_LSFE		__khwcap3_feature(LSFE)
+#define KERNEL_HWCAP_LS64		__khwcap3_feature(LS64)
+#define KERNEL_HWCAP_LS64_V		__khwcap3_feature(LS64_V)
 
 /*
  * This yields a mask that user programs can use to figure out what
