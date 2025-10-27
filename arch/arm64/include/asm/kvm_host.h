@@ -1168,7 +1168,13 @@ u64 kvm_vcpu_apply_reg_masks(const struct kvm_vcpu *, enum vcpu_sysreg, u64);
 	})
 
 u64 vcpu_read_sys_reg(const struct kvm_vcpu *, enum vcpu_sysreg);
-void vcpu_write_sys_reg(struct kvm_vcpu *, enum vcpu_sysreg, u64);
+void _vcpu_write_sys_reg(struct kvm_vcpu *, enum vcpu_sysreg, u64);
+
+#define vcpu_write_sys_reg(v, r, val)						\
+	do {									\
+		BUILD_BUG_ON_ZERO(__builtin_types_compatible_p(typeof(r), u64));\
+		_vcpu_write_sys_reg(v, r, val);					\
+	} while (0)
 
 struct kvm_vm_stat {
 	struct kvm_vm_stat_generic generic;

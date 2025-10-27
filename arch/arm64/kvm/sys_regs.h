@@ -78,7 +78,7 @@ struct sys_reg_desc {
 	u64 (*reset)(struct kvm_vcpu *, const struct sys_reg_desc *);
 
 	/* Index into sys_reg[], or 0 if we don't need to save it. */
-	int reg;
+	enum vcpu_sysreg reg;
 
 	/* Value (usually reset value), or write mask for idregs */
 	u64 val;
