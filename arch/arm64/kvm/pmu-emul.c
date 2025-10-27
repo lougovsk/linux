@@ -160,7 +160,7 @@ u64 kvm_pmu_get_counter_value(struct kvm_vcpu *vcpu, u64 select_idx)
 static void kvm_pmu_set_pmc_value(struct kvm_pmc *pmc, u64 val, bool force)
 {
 	struct kvm_vcpu *vcpu = kvm_pmc_to_vcpu(pmc);
-	u64 reg;
+	enum vcpu_sysreg reg;
 
 	kvm_pmu_release_perf_event(pmc);
 
@@ -230,7 +230,8 @@ static void kvm_pmu_release_perf_event(struct kvm_pmc *pmc)
 static void kvm_pmu_stop_counter(struct kvm_pmc *pmc)
 {
 	struct kvm_vcpu *vcpu = kvm_pmc_to_vcpu(pmc);
-	u64 reg, val;
+	enum vcpu_sysreg reg;
+	u64 val;
 
 	if (!pmc->perf_event)
 		return;
@@ -776,7 +777,7 @@ void kvm_pmu_set_counter_event_type(struct kvm_vcpu *vcpu, u64 data,
 				    u64 select_idx)
 {
 	struct kvm_pmc *pmc = kvm_vcpu_idx_to_pmc(vcpu, select_idx);
-	u64 reg;
+	enum vcpu_sysreg reg;
 
 	reg = counter_index_to_evtreg(pmc->idx);
 	__vcpu_assign_sys_reg(vcpu, reg, (data & kvm_pmu_evtyper_mask(vcpu->kvm)));

@@ -1136,14 +1136,15 @@ static inline u64 *___ctxt_sys_reg(const struct kvm_cpu_context *ctxt, int r)
 
 u64 kvm_vcpu_apply_reg_masks(const struct kvm_vcpu *, enum vcpu_sysreg, u64);
 
-#define __vcpu_assign_sys_reg(v, r, val)				\
-	do {								\
-		const struct kvm_cpu_context *ctxt = &(v)->arch.ctxt;	\
-		u64 __v = (val);					\
-		if (vcpu_has_nv((v)) && (r) >= __SANITISED_REG_START__)	\
-			__v = kvm_vcpu_apply_reg_masks((v), (r), __v);	\
-									\
-		ctxt_sys_reg(ctxt, (r)) = __v;				\
+#define __vcpu_assign_sys_reg(v, r, val)					\
+	do {									\
+		const struct kvm_cpu_context *ctxt = &(v)->arch.ctxt;		\
+		u64 __v = (val);						\
+		BUILD_BUG_ON_ZERO(__builtin_types_compatible_p(typeof(r), u64));\
+		if (vcpu_has_nv((v)) && (r) >= __SANITISED_REG_START__)		\
+			__v = kvm_vcpu_apply_reg_masks((v), (r), __v);		\
+										\
+		ctxt_sys_reg(ctxt, (r)) = __v;					\
 	} while (0)
 
 #define __vcpu_rmw_sys_reg(v, r, op, val)				\
