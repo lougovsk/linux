@@ -532,7 +532,7 @@ static inline void kvm_vcpu_set_be(struct kvm_vcpu *vcpu)
 
 		sctlr = vcpu_read_sys_reg(vcpu, r);
 		sctlr |= SCTLR_ELx_EE;
-		vcpu_write_sys_reg(vcpu, sctlr, r);
+		vcpu_write_sys_reg(vcpu, r, sctlr);
 	}
 }
 

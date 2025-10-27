@@ -28,10 +28,10 @@ static inline u64 __vcpu_read_sys_reg(const struct kvm_vcpu *vcpu, int reg)
 	return __vcpu_sys_reg(vcpu, reg);
 }
 
-static inline void __vcpu_write_sys_reg(struct kvm_vcpu *vcpu, u64 val, int reg)
+static inline void __vcpu_write_sys_reg(struct kvm_vcpu *vcpu, int reg, u64 val)
 {
 	if (has_vhe())
-		vcpu_write_sys_reg(vcpu, val, reg);
+		vcpu_write_sys_reg(vcpu, reg, val);
 	else
 		__vcpu_assign_sys_reg(vcpu, reg, val);
 }
@@ -41,9 +41,9 @@ static void __vcpu_write_spsr(struct kvm_vcpu *vcpu, unsigned long target_mode,
 {
 	if (has_vhe()) {
 		if (target_mode == PSR_MODE_EL1h)
-			vcpu_write_sys_reg(vcpu, val, SPSR_EL1);
+			vcpu_write_sys_reg(vcpu, SPSR_EL1, val);
 		else
-			vcpu_write_sys_reg(vcpu, val, SPSR_EL2);
+			vcpu_write_sys_reg(vcpu, SPSR_EL2, val);
 	} else {
 		__vcpu_assign_sys_reg(vcpu, SPSR_EL1, val);
 	}
@@ -103,12 +103,12 @@ static void enter_exception64(struct kvm_vcpu *vcpu, unsigned long target_mode,
 	case PSR_MODE_EL1h:
 		vbar = __vcpu_read_sys_reg(vcpu, VBAR_EL1);
 		sctlr = __vcpu_read_sys_reg(vcpu, SCTLR_EL1);
-		__vcpu_write_sys_reg(vcpu, *vcpu_pc(vcpu), ELR_EL1);
+		__vcpu_write_sys_reg(vcpu, ELR_EL1, *vcpu_pc(vcpu));
 		break;
 	case PSR_MODE_EL2h:
 		vbar = __vcpu_read_sys_reg(vcpu, VBAR_EL2);
 		sctlr = __vcpu_read_sys_reg(vcpu, SCTLR_EL2);
-		__vcpu_write_sys_reg(vcpu, *vcpu_pc(vcpu), ELR_EL2);
+		__vcpu_write_sys_reg(vcpu, ELR_EL2, *vcpu_pc(vcpu));
 		break;
 	default:
 		/* Don't do that */

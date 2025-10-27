@@ -449,7 +449,7 @@ static bool kvm_hyp_handle_cpacr_el1(struct kvm_vcpu *vcpu, u64 *exit_code)
 	if ((esr & ESR_ELx_SYS64_ISS_DIR_MASK) == ESR_ELx_SYS64_ISS_DIR_READ) {
 		vcpu_set_reg(vcpu, rt, __vcpu_sys_reg(vcpu, CPTR_EL2));
 	} else {
-		vcpu_write_sys_reg(vcpu, vcpu_get_reg(vcpu, rt), CPTR_EL2);
+		vcpu_write_sys_reg(vcpu, CPTR_EL2, vcpu_get_reg(vcpu, rt));
 		__activate_cptr_traps(vcpu);
 	}
 

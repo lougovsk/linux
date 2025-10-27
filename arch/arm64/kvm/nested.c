@@ -804,8 +804,8 @@ int kvm_s2_handle_perm_fault(struct kvm_vcpu *vcpu, struct kvm_s2_trans *trans)
 
 int kvm_inject_s2_fault(struct kvm_vcpu *vcpu, u64 esr_el2)
 {
-	vcpu_write_sys_reg(vcpu, vcpu->arch.fault.far_el2, FAR_EL2);
-	vcpu_write_sys_reg(vcpu, vcpu->arch.fault.hpfar_el2, HPFAR_EL2);
+	vcpu_write_sys_reg(vcpu, FAR_EL2, vcpu->arch.fault.far_el2);
+	vcpu_write_sys_reg(vcpu, HPFAR_EL2, vcpu->arch.fault.hpfar_el2);
 
 	return kvm_inject_nested_sync(vcpu, esr_el2);
 }

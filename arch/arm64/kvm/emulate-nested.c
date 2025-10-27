@@ -2722,7 +2722,7 @@ static void kvm_inject_el2_exception(struct kvm_vcpu *vcpu, u64 esr_el2,
 	switch (type) {
 	case except_type_sync:
 		kvm_pend_exception(vcpu, EXCEPT_AA64_EL2_SYNC);
-		vcpu_write_sys_reg(vcpu, esr_el2, ESR_EL2);
+		vcpu_write_sys_reg(vcpu, ESR_EL2, esr_el2);
 		break;
 	case except_type_irq:
 		kvm_pend_exception(vcpu, EXCEPT_AA64_EL2_IRQ);
@@ -2834,7 +2834,7 @@ int kvm_inject_nested_sea(struct kvm_vcpu *vcpu, bool iabt, u64 addr)
 			     iabt ? ESR_ELx_EC_IABT_LOW : ESR_ELx_EC_DABT_LOW);
 	esr |= ESR_ELx_FSC_EXTABT | ESR_ELx_IL;
 
-	vcpu_write_sys_reg(vcpu, addr, FAR_EL2);
+	vcpu_write_sys_reg(vcpu, FAR_EL2, addr);
 
 	if (__vcpu_sys_reg(vcpu, SCTLR2_EL2) & SCTLR2_EL1_EASE)
 		return kvm_inject_nested(vcpu, esr, except_type_serror);

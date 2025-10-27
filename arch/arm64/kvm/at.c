@@ -1424,7 +1424,7 @@ void __kvm_at_s1e01(struct kvm_vcpu *vcpu, u32 op, u64 vaddr)
 	    !par_check_s1_access_fault(par))
 		par = handle_at_slow(vcpu, op, vaddr);
 
-	vcpu_write_sys_reg(vcpu, par, PAR_EL1);
+	vcpu_write_sys_reg(vcpu, PAR_EL1, par);
 }
 
 void __kvm_at_s1e2(struct kvm_vcpu *vcpu, u32 op, u64 vaddr)
@@ -1479,7 +1479,7 @@ void __kvm_at_s1e2(struct kvm_vcpu *vcpu, u32 op, u64 vaddr)
 	if ((par & SYS_PAR_EL1_F) && !par_check_s1_perm_fault(par))
 		par = handle_at_slow(vcpu, op, vaddr);
 
-	vcpu_write_sys_reg(vcpu, par, PAR_EL1);
+	vcpu_write_sys_reg(vcpu, PAR_EL1, par);
 }
 
 void __kvm_at_s12(struct kvm_vcpu *vcpu, u32 op, u64 vaddr)
@@ -1538,7 +1538,7 @@ void __kvm_at_s12(struct kvm_vcpu *vcpu, u32 op, u64 vaddr)
 		out.esr = ESR_ELx_FSC_PERM_L(out.level & 0x3);
 
 	par = compute_par_s12(vcpu, par, &out);
-	vcpu_write_sys_reg(vcpu, par, PAR_EL1);
+	vcpu_write_sys_reg(vcpu, PAR_EL1, par);
 }
 
 /*

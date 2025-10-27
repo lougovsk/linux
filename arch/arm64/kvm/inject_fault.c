@@ -158,8 +158,8 @@ static void inject_abt64(struct kvm_vcpu *vcpu, bool is_iabt, unsigned long addr
 
 	esr |= fsc;
 
-	vcpu_write_sys_reg(vcpu, addr, exception_far_elx(vcpu));
-	vcpu_write_sys_reg(vcpu, esr, exception_esr_elx(vcpu));
+	vcpu_write_sys_reg(vcpu, exception_far_elx(vcpu), addr);
+	vcpu_write_sys_reg(vcpu, exception_esr_elx(vcpu), esr);
 }
 
 static void inject_undef64(struct kvm_vcpu *vcpu)
@@ -175,7 +175,7 @@ static void inject_undef64(struct kvm_vcpu *vcpu)
 	if (kvm_vcpu_trap_il_is32bit(vcpu))
 		esr |= ESR_ELx_IL;
 
-	vcpu_write_sys_reg(vcpu, esr, exception_esr_elx(vcpu));
+	vcpu_write_sys_reg(vcpu, exception_esr_elx(vcpu), esr);
 }
 
 #define DFSR_FSC_EXTABT_LPAE	0x10
@@ -211,15 +211,15 @@ static void inject_abt32(struct kvm_vcpu *vcpu, bool is_pabt, u32 addr)
 		kvm_pend_exception(vcpu, EXCEPT_AA32_IABT);
 		far &= GENMASK(31, 0);
 		far |= (u64)addr << 32;
-		vcpu_write_sys_reg(vcpu, fsr, IFSR32_EL2);
+		vcpu_write_sys_reg(vcpu, IFSR32_EL2, fsr);
 	} else { /* !iabt */
 		kvm_pend_exception(vcpu, EXCEPT_AA32_DABT);
 		far &= GENMASK(63, 32);
 		far |= addr;
-		vcpu_write_sys_reg(vcpu, fsr, ESR_EL1);
+		vcpu_write_sys_reg(vcpu, ESR_EL1, fsr);
 	}
 
-	vcpu_write_sys_reg(vcpu, far, FAR_EL1);
+	vcpu_write_sys_reg(vcpu, FAR_EL1, far);
 }
 
 static void __kvm_inject_sea(struct kvm_vcpu *vcpu, bool iabt, u64 addr)
@@ -275,7 +275,7 @@ void kvm_inject_size_fault(struct kvm_vcpu *vcpu)
 
 	esr = vcpu_read_sys_reg(vcpu, exception_esr_elx(vcpu));
 	esr &= ~GENMASK_ULL(5, 0);
-	vcpu_write_sys_reg(vcpu, esr, exception_esr_elx(vcpu));
+	vcpu_write_sys_reg(vcpu, exception_esr_elx(vcpu), esr);
 }
 
 /**
@@ -352,7 +352,7 @@ int kvm_inject_serror_esr(struct kvm_vcpu *vcpu, u64 esr)
 	if (!serror_is_masked(vcpu)) {
 		pend_serror_exception(vcpu);
 		esr |= FIELD_PREP(ESR_ELx_EC_MASK, ESR_ELx_EC_SERROR);
-		vcpu_write_sys_reg(vcpu, esr, exception_esr_elx(vcpu));
+		vcpu_write_sys_reg(vcpu, exception_esr_elx(vcpu), esr);
 		return 1;
 	}
 

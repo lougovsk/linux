@@ -338,7 +338,7 @@ u64 vcpu_read_sys_reg(const struct kvm_vcpu *vcpu, enum vcpu_sysreg reg)
 	return __vcpu_sys_reg(vcpu, reg);
 }
 
-void vcpu_write_sys_reg(struct kvm_vcpu *vcpu, u64 val, enum vcpu_sysreg reg)
+void vcpu_write_sys_reg(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg, u64 val)
 {
 	struct sr_loc loc = {};
 
@@ -489,7 +489,7 @@ static bool access_rw(struct kvm_vcpu *vcpu,
 		      const struct sys_reg_desc *r)
 {
 	if (p->is_write)
-		vcpu_write_sys_reg(vcpu, p->regval, r->reg);
+		vcpu_write_sys_reg(vcpu, r->reg, p->regval);
 	else
 		p->regval = vcpu_read_sys_reg(vcpu, r->reg);
 
@@ -572,7 +572,7 @@ static bool access_vm_reg(struct kvm_vcpu *vcpu,
 	}
 
 	val |= (p->regval & (mask >> shift)) << shift;
-	vcpu_write_sys_reg(vcpu, val, r->reg);
+	vcpu_write_sys_reg(vcpu, r->reg, val);
 
 	kvm_toggle_cache(vcpu, was_enabled);
 	return true;
@@ -866,14 +866,14 @@ static u64 reset_dbg_wb_reg(struct kvm_vcpu *vcpu, const struct sys_reg_desc *rd
 static u64 reset_amair_el1(struct kvm_vcpu *vcpu, const struct sys_reg_desc *r)
 {
 	u64 amair = read_sysreg(amair_el1);
-	vcpu_write_sys_reg(vcpu, amair, AMAIR_EL1);
+	vcpu_write_sys_reg(vcpu, AMAIR_EL1, amair);
 	return amair;
 }
 
 static u64 reset_actlr(struct kvm_vcpu *vcpu, const struct sys_reg_desc *r)
 {
 	u64 actlr = read_sysreg(actlr_el1);
-	vcpu_write_sys_reg(vcpu, actlr, ACTLR_EL1);
+	vcpu_write_sys_reg(vcpu, ACTLR_EL1, actlr);
 	return actlr;
 }
 
@@ -892,7 +892,7 @@ static u64 reset_mpidr(struct kvm_vcpu *vcpu, const struct sys_reg_desc *r)
 	mpidr |= ((vcpu->vcpu_id >> 4) & 0xff) << MPIDR_LEVEL_SHIFT(1);
 	mpidr |= ((vcpu->vcpu_id >> 12) & 0xff) << MPIDR_LEVEL_SHIFT(2);
 	mpidr |= (1ULL << 31);
-	vcpu_write_sys_reg(vcpu, mpidr, MPIDR_EL1);
+	vcpu_write_sys_reg(vcpu, MPIDR_EL1, mpidr);
 
 	return mpidr;
 }
@@ -2465,7 +2465,7 @@ static bool access_csselr(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 	int reg = r->reg;
 
 	if (p->is_write)
-		vcpu_write_sys_reg(vcpu, p->regval, reg);
+		vcpu_write_sys_reg(vcpu, reg, p->regval);
 	else
 		p->regval = vcpu_read_sys_reg(vcpu, reg);
 	return true;
@@ -2656,7 +2656,7 @@ static bool access_elr(struct kvm_vcpu *vcpu,
 		       const struct sys_reg_desc *r)
 {
 	if (p->is_write)
-		vcpu_write_sys_reg(vcpu, p->regval, ELR_EL1);
+		vcpu_write_sys_reg(vcpu, ELR_EL1, p->regval);
 	else
 		p->regval = vcpu_read_sys_reg(vcpu, ELR_EL1);
 
