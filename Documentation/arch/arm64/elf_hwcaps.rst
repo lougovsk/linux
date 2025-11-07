@@ -444,6 +444,20 @@ HWCAP3_MTE_STORE_ONLY
 HWCAP3_LSFE
     Functionality implied by ID_AA64ISAR3_EL1.LSFE == 0b0001
 
+HWCAP3_LS64
+    Functionality implied by ID_AA64ISAR1_EL1.LS64 == 0b0001. Note that
+    the function of instruction ld64b/st64b requires support by CPU, system
+    and target (device) memory location and HWCAP3_LS64 implies the support
+    of CPU. User should only use ld64b/st64b on supported target (device)
+    memory location, otherwise fallback to the non-atomic alternatives.
+
+HWCAP3_LS64_V
+    Functionality implied by ID_AA64ISAR1_EL1.LS64 == 0b0010. Same to
+    HWCAP3_LS64 that HWCAP3_LS64_V implies CPU's support of instruction
+    st64bv but also requires the support from the system and target (device)
+    memory location. st64bv supports return status result and 0xFFFFFFFFFFFFFFFF
+    will be returned for unsupported memory location.
+
 
 4. Unused AT_HWCAP bits
 -----------------------
