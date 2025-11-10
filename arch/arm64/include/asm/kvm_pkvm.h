@@ -52,6 +52,26 @@ static inline bool kvm_pkvm_ext_allowed(struct kvm *kvm, long ext)
 	}
 }
 
+/*
+ * Check whether the KVM IOCTL is allowed in pKVM.
+ *
+ * Certain features are allowed only for non-protected VMs in pKVM, which is why
+ * this takes the VM (kvm) as a parameter.
+ */
+static inline bool kvm_pkvm_ioctl_allowed(struct kvm *kvm, unsigned int ioctl)
+{
+	switch (ioctl) {
+	case KVM_CREATE_IRQCHIP:
+		return kvm_pkvm_ext_allowed(kvm, KVM_CAP_IRQCHIP);
+	case KVM_ARM_MTE_COPY_TAGS:
+		return kvm_pkvm_ext_allowed(kvm, KVM_CAP_ARM_MTE);
+	case KVM_ARM_SET_COUNTER_OFFSET:
+		return kvm_pkvm_ext_allowed(kvm, KVM_CAP_COUNTER_OFFSET);
+	default:
+		return true;
+	}
+}
+
 extern struct memblock_region kvm_nvhe_sym(hyp_memory)[];
 extern unsigned int kvm_nvhe_sym(hyp_memblock_nr);
 
