@@ -1650,3 +1650,89 @@ int __kvm_find_s1_desc_level(struct kvm_vcpu *vcpu, u64 va, u64 ipa, int *level)
 		return ret;
 	}
 }
+
+static int __lse_swap_desc(u64 __user *ptep, u64 old, u64 new)
+{
+	u64 tmp = old;
+	int ret = 0;
+
+	uaccess_enable_privileged();
+
+	asm volatile(__LSE_PREAMBLE
+		     "1: cas	%[old], %[new], %[addr]\n"
+		     "2:\n"
+		     _ASM_EXTABLE_UACCESS_ERR(1b, 2b, %w[ret])
+		     : [old] "+r" (old), [addr] "+Q" (*ptep), [ret] "+r" (ret)
+		     : [new] "r" (new)
+		     : "memory");
+
+	uaccess_disable_privileged();
+
+	if (ret)
+		return ret;
+	if (tmp != old)
+		return -EAGAIN;
+
+	return ret;
+}
+
+static int __llsc_swap_desc(u64 __user *ptep, u64 old, u64 new)
+{
+	unsigned int loops = 128;
+	u64 tmp;
+	int ret;
+
+	uaccess_enable_privileged();
+
+	asm volatile("prfm	pstl1strm, %[addr]\n"
+		     "1: ldxr	%[tmp], %[addr]\n"
+		     "sub	%[tmp], %[tmp], %[old]\n"
+		     "cbnz	%[tmp], 3f\n"
+		     "2: stlxr	%w[ret], %[new], %[addr]\n"
+		     "cbz	%w[ret], 4f\n"
+		     "sub	%w[loops], %w[loops], #1\n"
+		     "cbnz	%w[loops], 1b\n"
+		     "3: mov	%w[ret], %w[eagain]\n"
+		     "4:\n"
+		     : [ret] "=r" (ret), [addr] "+Q" (*ptep), [tmp] "=&r" (tmp),
+		       [loops] "+r" (loops)
+		     : [old] "r" (old), [new] "r" (new), [eagain] "Ir" (-EAGAIN)
+		     : "memory");
+
+	uaccess_disable_privileged();
+	return ret;
+}
+
+int __kvm_at_swap_desc(struct kvm *kvm, gpa_t ipa, u64 old, u64 new)
+{
+	struct kvm_memory_slot *slot;
+	unsigned long hva;
+	u64 __user *ptep;
+	bool writable;
+	int offset;
+	gfn_t gfn;
+	int r;
+
+	gfn = ipa >> PAGE_SHIFT;
+	offset = offset_in_page(ipa);
+	slot = gfn_to_memslot(kvm, gfn);
+	hva = gfn_to_hva_memslot_prot(slot, gfn, &writable);
+	if (kvm_is_error_hva(hva))
+		return -EINVAL;
+	if (!writable)
+		return -EPERM;
+
+	ptep = (u64 __user *)hva + offset;
+	if (cpus_have_final_cap(ARM64_HAS_LSE_ATOMICS))
+		r = __lse_swap_desc(ptep, old, new);
+	else
+		r = __llsc_swap_desc(ptep, old, new);
+
+	if (r < 0)
+		return r;
+	if (r)
+		return -EAGAIN;
+
+	mark_page_dirty_in_slot(kvm, slot, gfn);
+	return 0;
+}
