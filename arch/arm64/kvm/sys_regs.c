@@ -3770,7 +3770,8 @@ static bool handle_at_s1e01(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 {
 	u32 op = sys_insn(p->Op0, p->Op1, p->CRn, p->CRm, p->Op2);
 
-	__kvm_at_s1e01(vcpu, op, p->regval);
+	if (__kvm_at_s1e01(vcpu, op, p->regval))
+		return false;
 
 	return true;
 }
@@ -3787,7 +3788,8 @@ static bool handle_at_s1e2(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 		return false;
 	}
 
-	__kvm_at_s1e2(vcpu, op, p->regval);
+	if (__kvm_at_s1e2(vcpu, op, p->regval))
+		return false;
 
 	return true;
 }
@@ -3797,7 +3799,8 @@ static bool handle_at_s12(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 {
 	u32 op = sys_insn(p->Op0, p->Op1, p->CRn, p->CRm, p->Op2);
 
-	__kvm_at_s12(vcpu, op, p->regval);
+	if (__kvm_at_s12(vcpu, op, p->regval))
+		return false;
 
 	return true;
 }
