@@ -168,6 +168,7 @@ static void handle___pkvm_vcpu_load(struct kvm_cpu_context *host_ctxt)
 	DECLARE_REG(unsigned int, vcpu_idx, host_ctxt, 2);
 	DECLARE_REG(u64, hcr_el2, host_ctxt, 3);
 	struct pkvm_hyp_vcpu *hyp_vcpu;
+	struct kvm_vcpu *hyp_kvm_vcpu;
 
 	if (!is_protected_kvm_enabled())
 		return;
@@ -176,10 +177,17 @@ static void handle___pkvm_vcpu_load(struct kvm_cpu_context *host_ctxt)
 	if (!hyp_vcpu)
 		return;
 
+	hyp_kvm_vcpu = &hyp_vcpu->vcpu;
+
 	if (pkvm_hyp_vcpu_is_protected(hyp_vcpu)) {
 		/* Propagate WFx trapping flags */
-		hyp_vcpu->vcpu.arch.hcr_el2 &= ~(HCR_TWE | HCR_TWI);
-		hyp_vcpu->vcpu.arch.hcr_el2 |= hcr_el2 & (HCR_TWE | HCR_TWI);
+		hyp_kvm_vcpu->arch.hcr_el2 &= ~(HCR_TWE | HCR_TWI);
+		hyp_kvm_vcpu->arch.hcr_el2 |= hcr_el2 & (HCR_TWE | HCR_TWI);
+	} else {
+		struct kvm_vcpu *host_vcpu = hyp_vcpu->host_vcpu;
+
+		memcpy(&hyp_kvm_vcpu->arch.fgt, host_vcpu->arch.fgt,
+		       sizeof(hyp_kvm_vcpu->arch.fgt));
 	}
 }
 
