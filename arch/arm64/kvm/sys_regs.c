@@ -4668,7 +4668,13 @@ static void perform_access(struct kvm_vcpu *vcpu,
 	 * that we don't know how to handle. This certainly qualifies
 	 * as a gross bug that should be fixed right away.
 	 */
-	BUG_ON(!r->access);
+	if (!r->access) {
+		KVM_BUG(1, vcpu->kvm,
+			"Unexpected access to register: { Op0(%2u), Op1(%2u), CRn(%2u), CRm(%2u), Op2(%2u) } (%s)",
+			params->Op0, params->Op1, params->CRn, params->CRm, params->Op2,
+			str_write_read(params->is_write));
+		return;
+	}
 
 	/* Skip instruction if instructed so */
 	if (likely(r->access(vcpu, params, r)))
