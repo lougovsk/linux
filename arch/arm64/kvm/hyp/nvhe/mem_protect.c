@@ -539,12 +539,8 @@ static void __host_update_page_state(phys_addr_t addr, u64 size, enum pkvm_page_
 		set_host_state(page, state);
 }
 
-static kvm_pte_t kvm_init_invalid_leaf_owner(u8 owner_id)
-{
-	return FIELD_PREP(KVM_INVALID_PTE_OWNER_MASK, owner_id);
-}
-
-int host_stage2_set_owner_locked(phys_addr_t addr, u64 size, u8 owner_id)
+static int host_stage2_set_owner_metadata_locked(phys_addr_t addr, u64 size,
+						 u8 owner_id, u64 meta)
 {
 	kvm_pte_t annotation;
 	int ret;
@@ -552,10 +548,14 @@ int host_stage2_set_owner_locked(phys_addr_t addr, u64 size, u8 owner_id)
 	if (!FIELD_FIT(KVM_INVALID_PTE_OWNER_MASK, owner_id))
 		return -EINVAL;
 
+	if (!FIELD_FIT(KVM_INVALID_PTE_EXTRA_MASK, meta))
+		return -EINVAL;
+
 	if (!range_is_memory(addr, addr + size))
 		return -EPERM;
 
-	annotation = kvm_init_invalid_leaf_owner(owner_id);
+	annotation = FIELD_PREP(KVM_INVALID_PTE_OWNER_MASK, owner_id) |
+		     FIELD_PREP(KVM_INVALID_PTE_EXTRA_MASK, meta);
 	ret = host_stage2_try(kvm_pgtable_stage2_annotate, &host_mmu.pgt,
 			      addr, size, &host_s2_pool, annotation);
 	if (ret)
@@ -568,6 +568,11 @@ int host_stage2_set_owner_locked(phys_addr_t addr, u64 size, u8 owner_id)
 		__host_update_page_state(addr, size, PKVM_NOPAGE);
 
 	return 0;
+}
+
+int host_stage2_set_owner_locked(phys_addr_t addr, u64 size, u8 owner_id)
+{
+	return host_stage2_set_owner_metadata_locked(addr, size, owner_id, 0);
 }
 
 static bool host_stage2_force_pte_cb(u64 addr, u64 end, enum kvm_pgtable_prot prot)
