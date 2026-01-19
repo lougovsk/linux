@@ -911,6 +911,14 @@ static void stage2_unmap_put_pte(const struct kvm_pgtable_visit_ctx *ctx,
 static bool stage2_pte_cacheable(struct kvm_pgtable *pgt, kvm_pte_t pte)
 {
 	u64 memattr = pte & KVM_PTE_LEAF_ATTR_LO_S2_MEMATTR;
+
+	/*
+	 * With S2_AS_S1, we have no idea whether the OA is actual memory or
+	 * a device. Don't even try a CMO on that.
+	 */
+	if (pgt->flags & KVM_PGTABLE_S2_AS_S1)
+		return false;
+
 	return kvm_pte_valid(pte) && memattr == KVM_S2_MEMATTR(pgt, NORMAL);
 }
 
