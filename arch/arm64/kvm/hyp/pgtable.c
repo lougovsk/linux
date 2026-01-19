@@ -660,11 +660,9 @@ void kvm_tlb_flush_vmid_range(struct kvm_s2_mmu *mmu,
 	({								\
 		kvm_pte_t __attr;					\
 		if((pgt)->flags & KVM_PGTABLE_S2_AS_S1)			\
-			__attr = PAGE_S2_MEMATTR(AS_S1,			\
-						 stage2_has_fwb());	\
+			__attr = PAGE_S2_MEMATTR(AS_S1);		\
 		else							\
-			__attr = PAGE_S2_MEMATTR(attr,			\
-						 stage2_has_fwb());	\
+			__attr = PAGE_S2_MEMATTR(attr);			\
 									\
 		__attr;							\
 	})
