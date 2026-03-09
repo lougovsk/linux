@@ -2345,13 +2345,17 @@ static bool can_trap_icv_dir_el1(const struct arm64_cpu_capabilities *entry,
 	    !is_midr_in_range_list(has_vgic_v3))
 		return false;
 
-	if (is_kernel_in_hyp_mode())
+	if (is_kernel_in_hyp_mode()) {
 		res.a1 = read_sysreg_s(SYS_ICH_VTR_EL2);
-	else
+	} else if (system_capabilities_finalized() && is_protected_kvm_enabled()) {
+		arm_smccc_1_1_hvc(KVM_HOST_SMCCC_FUNC(__vgic_v3_get_ich_vtr_el2), &res);
+		if (res.a0 == SMCCC_RET_NOT_SUPPORTED)
+			return false;
+	} else {
 		arm_smccc_1_1_hvc(HVC_GET_ICH_VTR_EL2, &res);
-
-	if (res.a0 == HVC_STUB_ERR)
-		return false;
+		if (res.a0 == HVC_STUB_ERR)
+			return false;
+	}
 
 	return res.a1 & ICH_VTR_EL2_TDS;
 }
