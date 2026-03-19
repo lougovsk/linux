@@ -523,15 +523,6 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 
 	vcpu->arch.mmu_page_cache.gfp_zero = __GFP_ZERO;
 
-	/* Set up the timer */
-	kvm_timer_vcpu_init(vcpu);
-
-	kvm_pmu_vcpu_init(vcpu);
-
-	kvm_arm_pvtime_vcpu_init(&vcpu->arch);
-
-	vcpu->arch.hw_mmu = &vcpu->kvm->arch.mmu;
-
 	/*
 	 * This vCPU may have been created after mpidr_data was initialized.
 	 * Throw out the pre-computed mappings if that is the case which forces
@@ -542,6 +533,15 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	err = kvm_vgic_vcpu_init(vcpu);
 	if (err)
 		return err;
+
+	/* Set up the timer */
+	kvm_timer_vcpu_init(vcpu);
+
+	kvm_pmu_vcpu_init(vcpu);
+
+	kvm_arm_pvtime_vcpu_init(&vcpu->arch);
+
+	vcpu->arch.hw_mmu = &vcpu->kvm->arch.mmu;
 
 	err = kvm_share_hyp(vcpu, vcpu + 1);
 	if (err)
