@@ -105,11 +105,9 @@ SYM_CODE_START_LOCAL(__finalise_el2)
 	msr_hcr_el2 x0
 	isb
 
-	// Use the EL1 allocated stack, per-cpu offset
+	// Use the EL1 allocated stack
 	mrs	x0, sp_el1
 	mov	sp, x0
-	mrs	x0, tpidr_el1
-	msr	tpidr_el2, x0
 
 	// FP configuration, vectors
 	mrs_s	x0, SYS_CPACR_EL12
