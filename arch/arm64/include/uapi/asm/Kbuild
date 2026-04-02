@@ -5,3 +5,4 @@ generic-y += kvm_para.h
 
 shared-uapi-y += kvm.h
 shared-uapi-y += sve_context.h
+shared-uapi-y += pstate.h
