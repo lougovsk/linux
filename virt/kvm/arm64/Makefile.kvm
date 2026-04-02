@@ -9,4 +9,5 @@ shared-arm64-obj := \
 	$(KVM_ARM64)/guest.o \
 	$(KVM_ARM64)/handle_exit.o \
 	$(KVM_ARM64)/mmio.o \
+	$(KVM_ARM64)/reset.o \
 

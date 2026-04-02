@@ -878,39 +878,6 @@ struct kvm_vcpu_arch {
 };
 
 /*
- * Each 'flag' is composed of a comma-separated triplet:
- *
- * - the flag-set it belongs to in the vcpu->arch structure
- * - the value for that flag
- * - the mask for that flag
- *
- *  __vcpu_single_flag() builds such a triplet for a single-bit flag.
- * unpack_vcpu_flag() extract the flag value from the triplet for
- * direct use outside of the flag accessors.
- */
-#define __vcpu_single_flag(_set, _f)	_set, (_f), (_f)
-
-#define __unpack_flag(_set, _f, _m)	_f
-#define unpack_vcpu_flag(...)		__unpack_flag(__VA_ARGS__)
-
-#define __build_check_flag(v, flagset, f, m)			\
-	do {							\
-		typeof(v->arch.flagset) *_fset;			\
-								\
-		/* Check that the flags fit in the mask */	\
-		BUILD_BUG_ON(HWEIGHT(m) != HWEIGHT((f) | (m)));	\
-		/* Check that the flags fit in the type */	\
-		BUILD_BUG_ON((sizeof(*_fset) * 8) <= __fls(m));	\
-	} while (0)
-
-#define __vcpu_get_flag(v, flagset, f, m)			\
-	({							\
-		__build_check_flag(v, flagset, f, m);		\
-								\
-		READ_ONCE(v->arch.flagset) & (m);		\
-	})
-
-/*
  * Note that the set/clear accessors must be preempt-safe in order to
  * avoid nesting them with load/put which also manipulate flags...
  */
@@ -923,54 +890,14 @@ struct kvm_vcpu_arch {
 #define __vcpu_flags_preempt_enable()	preempt_enable()
 #endif
 
-#define __vcpu_set_flag(v, flagset, f, m)			\
-	do {							\
-		typeof(v->arch.flagset) *fset;			\
-								\
-		__build_check_flag(v, flagset, f, m);		\
-								\
-		fset = &v->arch.flagset;			\
-		__vcpu_flags_preempt_disable();			\
-		if (HWEIGHT(m) > 1)				\
-			*fset &= ~(m);				\
-		*fset |= (f);					\
-		__vcpu_flags_preempt_enable();			\
-	} while (0)
-
-#define __vcpu_clear_flag(v, flagset, f, m)			\
-	do {							\
-		typeof(v->arch.flagset) *fset;			\
-								\
-		__build_check_flag(v, flagset, f, m);		\
-								\
-		fset = &v->arch.flagset;			\
-		__vcpu_flags_preempt_disable();			\
-		*fset &= ~(m);					\
-		__vcpu_flags_preempt_enable();			\
-	} while (0)
-
-#define __vcpu_test_and_clear_flag(v, flagset, f, m)		\
-	({							\
-		typeof(v->arch.flagset) set;			\
-								\
-		set = __vcpu_get_flag(v, flagset, f, m);	\
-		__vcpu_clear_flag(v, flagset, f, m);		\
-								\
-		set;						\
-	})
-
-#define vcpu_get_flag(v, ...)	__vcpu_get_flag((v), __VA_ARGS__)
-#define vcpu_set_flag(v, ...)	__vcpu_set_flag((v), __VA_ARGS__)
-#define vcpu_clear_flag(v, ...)	__vcpu_clear_flag((v), __VA_ARGS__)
-#define vcpu_test_and_clear_flag(v, ...)			\
-	__vcpu_test_and_clear_flag((v), __VA_ARGS__)
-
-/* KVM_ARM_VCPU_INIT completed */
-#define VCPU_INITIALIZED	__vcpu_single_flag(cflags, BIT(0))
-/* SVE config completed */
-#define VCPU_SVE_FINALIZED	__vcpu_single_flag(cflags, BIT(1))
-/* pKVM VCPU setup completed */
-#define VCPU_PKVM_FINALIZED	__vcpu_single_flag(cflags, BIT(2))
+#define _vcpu_get_flag(v, flagset, ...)	\
+	__vcpu_get_flag(&(v)->arch.flagset, __VA_ARGS__)
+#define _vcpu_set_flag(v, flagset, ...)	\
+	__vcpu_set_flag(&(v)->arch.flagset, __VA_ARGS__)
+#define _vcpu_clear_flag(v, flagset, ...)	\
+	__vcpu_clear_flag(&(v)->arch.flagset, __VA_ARGS__)
+#define _vcpu_test_and_clear_flag(v, flagset, ...)	\
+	__vcpu_test_and_clear_flag(&(v)->arch.flagset, __VA_ARGS__)
 
 /* Physical CPU not in supported_cpus */
 #define ON_UNSUPPORTED_CPU	__vcpu_single_flag(sflags, BIT(0))
@@ -1080,6 +1007,12 @@ static inline u64 *___ctxt_sys_reg(const struct kvm_cpu_context *ctxt, int r)
 	})
 
 #define ctxt_sys_reg(c,r)	(*__ctxt_sys_reg(c,r))
+
+#define kvm_vcpu_get_sp_el1(__vcpu) (__ctxt_sys_reg(&(__vcpu)->arch.ctxt, SP_EL1))
+#define kvm_vcpu_get_vreg(__vcpu, _n) (&(__vcpu)->arch.ctxt.fp_regs.vregs[_n])
+#define kvm_vcpu_get_vregs(__vcpu) (&(__vcpu)->arch.ctxt.fp_regs.vregs)
+#define kvm_vcpu_get_fpsr(__vcpu) (&(__vcpu)->arch.ctxt.fp_regs.fpsr)
+#define kvm_vcpu_get_fpcr(__vcpu) (&(__vcpu)->arch.ctxt.fp_regs.fpcr)
 
 u64 kvm_vcpu_apply_reg_masks(const struct kvm_vcpu *, enum vcpu_sysreg, u64);
 
@@ -1412,8 +1345,6 @@ static inline bool __vcpu_has_feature(const struct kvm_arch *ka, int feature)
 
 #define kvm_vcpu_has_feature(k, f)	__vcpu_has_feature(&(k)->arch, (f))
 #define vcpu_has_feature(v, f)	__vcpu_has_feature(&(v)->kvm->arch, (f))
-
-#define kvm_vcpu_initialized(v) vcpu_get_flag(vcpu, VCPU_INITIALIZED)
 
 int kvm_trng_call(struct kvm_vcpu *vcpu);
 #ifdef CONFIG_KVM

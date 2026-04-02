@@ -41,6 +41,86 @@ unsigned long kvm_mmio_read_buf(const void *buf, unsigned int len);
 int kvm_handle_mmio_return(struct kvm_vcpu *vcpu);
 int io_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa);
 
+/*
+ * Each 'flag' is composed of a comma-separated triplet:
+ *
+ * - the flag-set it belongs to in the vcpu->arch structure
+ * - the value for that flag
+ * - the mask for that flag
+ *
+ *  __vcpu_single_flag() builds such a triplet for a single-bit flag.
+ * unpack_vcpu_flag() extract the flag value from the triplet for
+ * direct use outside of the flag accessors.
+ */
+#define __vcpu_single_flag(_set, _f)	_set, (_f), (_f)
+
+#define __unpack_flag(_set, _f, _m)	_f
+#define unpack_vcpu_flag(...)		__unpack_flag(__VA_ARGS__)
+
+#define __build_check_flag(flagset, f, m)				\
+	do {								\
+		/* Check that the flags fit in the mask */		\
+		BUILD_BUG_ON(HWEIGHT(m) != HWEIGHT((f) | (m)));		\
+		/* Check that the flags fit in the type */		\
+		BUILD_BUG_ON((sizeof(*(flagset)) * 8) <= __fls(m));	\
+	} while (0)
+
+#define __vcpu_get_flag(flagset, f, m)				\
+	({							\
+		__build_check_flag((flagset), f, m);		\
+								\
+		READ_ONCE(*(flagset)) & (m);			\
+	})
+
+#define __vcpu_set_flag(flagset, f, m)				\
+	do {							\
+		typeof(*flagset) *fset;				\
+								\
+		__build_check_flag((flagset), f, m);		\
+								\
+		fset = (flagset);				\
+		__vcpu_flags_preempt_disable();			\
+		if (HWEIGHT(m) > 1)				\
+			*fset &= ~(m);				\
+		*fset |= (f);					\
+		__vcpu_flags_preempt_enable();			\
+	} while (0)
+
+#define __vcpu_clear_flag(flagset, f, m)			\
+	do {							\
+		typeof(*flagset) *fset;				\
+								\
+		__build_check_flag(flagset, f, m);		\
+								\
+		fset = (flagset);				\
+		__vcpu_flags_preempt_disable();			\
+		*fset &= ~(m);					\
+		__vcpu_flags_preempt_enable();			\
+	} while (0)
+
+#define __vcpu_test_and_clear_flag(flagset, f, m)		\
+	({							\
+		typeof(*flagset) set;				\
+								\
+		set = __vcpu_get_flag((flagset), f, m);		\
+		__vcpu_clear_flag((flagset), f, m);		\
+								\
+		set;						\
+	})
+
+#define vcpu_get_flag(v,  ...)	_vcpu_get_flag((v), __VA_ARGS__)
+#define vcpu_set_flag(v, ...)	_vcpu_set_flag((v), __VA_ARGS__)
+#define vcpu_clear_flag(v, ...)	_vcpu_clear_flag((v), __VA_ARGS__)
+#define vcpu_test_and_clear_flag(v, ...)	\
+	_vcpu_test_and_clear_flag((v), __VA_ARGS__)
+
+/* KVM_ARM_VCPU_INIT completed */
+#define VCPU_INITIALIZED	__vcpu_single_flag(cflags, BIT(0))
+/* SVE config completed */
+#define VCPU_SVE_FINALIZED	__vcpu_single_flag(cflags, BIT(1))
+/* pKVM VCPU setup completed */
+#define VCPU_PKVM_FINALIZED	__vcpu_single_flag(cflags, BIT(2))
+
 /* Exception pending */
 #define PENDING_EXCEPTION	__vcpu_single_flag(iflags, BIT(0))
 /*
@@ -75,6 +155,8 @@ int io_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa);
 #define EXCEPT_AA64_EL2_IRQ	__vcpu_except_flags(5)
 #define EXCEPT_AA64_EL2_FIQ	__vcpu_except_flags(6)
 #define EXCEPT_AA64_EL2_SERR	__vcpu_except_flags(7)
+
+#define kvm_vcpu_initialized(v) vcpu_get_flag(v, VCPU_INITIALIZED)
 
 static inline bool kvm_supports_32bit_el0(void)
 {
