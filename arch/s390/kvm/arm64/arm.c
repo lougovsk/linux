@@ -435,6 +435,7 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu)
 				  vcpu->arch.sae_block.vir);
 			ret = -EINVAL;
 			break;
+		case SAE_ICPTR_HOST_ACCESS_EXCEPTION:
 		case SAE_ICPTR_SYNCHRONOUS_EXCEPTION:
 			ret = handle_trap_exceptions(vcpu);
 			break;
