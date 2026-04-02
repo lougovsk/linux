@@ -46,13 +46,17 @@ generic-y   += $(foreach f, $(mandatory-y), $(if $(wildcard $(src)/$(f)),,$(f)))
 generic-y   := $(addprefix $(obj)/, $(generic-y))
 syscall-y   := $(addprefix $(obj)/, $(syscall-y))
 generated-y := $(addprefix $(obj)/, $(generated-y))
+shared-uapi-y  := $(addprefix $(obj)/, $(shared-uapi-y))
 
 # Remove stale wrappers when the corresponding files are removed from generic-y
 old-headers := $(wildcard $(obj)/*.h)
-unwanted    := $(filter-out $(generic-y) $(generated-y) $(syscall-y),$(old-headers))
+unwanted    := $(filter-out $(generic-y) $(generated-y) $(syscall-y) $(shared-uapi-y),$(old-headers))
 
 quiet_cmd_wrap = WRAP    $@
       cmd_wrap = echo "\#include <asm-generic/$*.h>" > $@
+
+quiet_cmd_share_hdr = SHARE   $@
+      cmd_share_hdr = cp $< $@
 
 quiet_cmd_remove = REMOVE  $(unwanted)
       cmd_remove = rm -f $(unwanted)
@@ -70,12 +74,18 @@ quiet_cmd_systbl = SYSTBL  $@
 		   --abis $(subst $(space),$(comma),$(strip $(syscall_abis_$*))) \
 		   $< $@
 
-all: $(generic-y) $(syscall-y)
+all: $(generic-y) $(syscall-y) $(shared-uapi-y)
 	$(if $(unwanted),$(call cmd,remove))
 	@:
 
 $(obj)/%.h: $(srctree)/$(generic)/%.h
 	$(call cmd,wrap)
+
+# Let architectures define architecture specific headers that can be shared
+# with other architectures to enable single-system cross architecture communication
+shared-uapi-dest := $(srctree)/include/uapi/arch/$(SRCARCH)/asm
+$(shared-uapi-y): $(obj)/%.h: $(shared-uapi-dest)/%.h FORCE
+	$(call if_changed,share_hdr)
 
 $(obj)/unistd_%.h: $(syscalltbl) $(syshdr) FORCE
 	$(call if_changed,syshdr)

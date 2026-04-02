@@ -4,11 +4,17 @@ no-export-headers += linux/a.out.h
 endif
 
 ifeq ($(wildcard $(srctree)/arch/$(SRCARCH)/include/uapi/asm/kvm.h),)
+ifneq ($(ARCH),arm64)
 no-export-headers += linux/kvm.h
+endif
 endif
 
 ifeq ($(wildcard $(srctree)/arch/$(SRCARCH)/include/uapi/asm/kvm_para.h),)
 ifeq ($(wildcard $(objtree)/arch/$(SRCARCH)/include/generated/uapi/asm/kvm_para.h),)
 no-export-headers += linux/kvm_para.h
 endif
+endif
+
+ifneq ($(ARCH),s390)
+no-export-headers += arch/%
 endif

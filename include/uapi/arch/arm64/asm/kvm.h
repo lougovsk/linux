@@ -34,8 +34,26 @@
 #ifndef __ASSEMBLER__
 #include <linux/psci.h>
 #include <linux/types.h>
+#include "sve_context.h"
+
+#ifdef __arm64__
 #include <asm/ptrace.h>
-#include <asm/sve_context.h>
+typedef struct user_pt_regs user_pt_regs_arm64;
+typedef struct user_fpsimd_state user_fpsimd_state_arm64;
+#else
+typedef struct {
+	__u64		regs[31];
+	__u64		sp;
+	__u64		pc;
+	__u64		pstate;
+} user_pt_regs_arm64;
+typedef struct {
+	__uint128_t	vregs[32];
+	__u32		fpsr;
+	__u32		fpcr;
+	__u32		__reserved[2];
+} __attribute__((aligned(16))) user_fpsimd_state_arm64;
+#endif
 
 #define __KVM_HAVE_IRQ_LINE
 #define __KVM_HAVE_VCPU_EVENTS
@@ -44,14 +62,14 @@
 #define KVM_DIRTY_LOG_PAGE_OFFSET 64
 
 struct kvm_regs {
-	struct user_pt_regs regs;	/* sp = sp_el0 */
+	user_pt_regs_arm64 regs;	/* sp = sp_el0 */
 
 	__u64	sp_el1;
 	__u64	elr_el1;
 
 	__u64	spsr[KVM_NR_SPSR];
 
-	struct user_fpsimd_state fp_regs;
+	user_fpsimd_state_arm64 fp_regs;
 };
 
 /*

@@ -2,3 +2,6 @@
 syscall-y += unistd_64.h
 
 generic-y += kvm_para.h
+
+shared-uapi-y += kvm.h
+shared-uapi-y += sve_context.h
