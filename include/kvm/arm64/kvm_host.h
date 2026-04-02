@@ -28,6 +28,12 @@ struct vcpu_reset_state {
 	bool		reset;
 };
 
+/* Implemented in virt/kvm/arm64/arm.c */
+int kvm_vcpu_init_check_features(struct kvm_vcpu *vcpu,
+				 const struct kvm_vcpu_init *init);
+bool kvm_vcpu_init_changed(struct kvm_vcpu *vcpu,
+			   const struct kvm_vcpu_init *init);
+
 /* MMIO helpers */
 void kvm_mmio_write_buf(void *buf, unsigned int len, unsigned long data);
 unsigned long kvm_mmio_read_buf(const void *buf, unsigned int len);
@@ -74,6 +80,9 @@ static inline bool kvm_supports_32bit_el0(void)
 {
 	return false;
 }
+
+/* Implemented in architecture specific code */
+unsigned long system_supported_vcpu_features(void);
 
 #define vcpu_is_protected(vcpu)		kvm_vm_is_protected((vcpu)->kvm)
 

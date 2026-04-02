@@ -24,10 +24,10 @@
 
 #include <kvm/arm_hypercalls.h>
 
+#include <kvm/arm64/handle_exit.h>
+
 #define CREATE_TRACE_POINTS
 #include "trace_handle_exit.h"
-
-typedef int (*exit_handle_fn)(struct kvm_vcpu *);
 
 static void kvm_handle_guest_serror(struct kvm_vcpu *vcpu, u64 esr)
 {
@@ -213,17 +213,6 @@ static int kvm_handle_guest_debug(struct kvm_vcpu *vcpu)
 	return 0;
 }
 
-static int kvm_handle_unknown_ec(struct kvm_vcpu *vcpu)
-{
-	u64 esr = kvm_vcpu_get_esr(vcpu);
-
-	kvm_pr_unimpl("Unknown exception class: esr: %#016llx -- %s\n",
-		      esr, esr_get_class_string(esr));
-
-	kvm_inject_undefined(vcpu);
-	return 1;
-}
-
 /*
  * Guest access to SVE registers should be routed to this handler only
  * when the system doesn't support SVE.
@@ -373,7 +362,7 @@ static int handle_other(struct kvm_vcpu *vcpu)
 	return 1;
 }
 
-static exit_handle_fn arm_exit_handlers[] = {
+exit_handle_fn arm_exit_handlers[] = {
 	[0 ... ESR_ELx_EC_MAX]	= kvm_handle_unknown_ec,
 	[ESR_ELx_EC_WFx]	= kvm_handle_wfx,
 	[ESR_ELx_EC_CP15_32]	= kvm_handle_cp15_32,
@@ -403,41 +392,6 @@ static exit_handle_fn arm_exit_handlers[] = {
 	[ESR_ELx_EC_PAC]	= kvm_handle_ptrauth,
 	[ESR_ELx_EC_GCS]	= kvm_handle_gcs,
 };
-
-static exit_handle_fn kvm_get_exit_handler(struct kvm_vcpu *vcpu)
-{
-	u64 esr = kvm_vcpu_get_esr(vcpu);
-	u8 esr_ec = ESR_ELx_EC(esr);
-
-	return arm_exit_handlers[esr_ec];
-}
-
-/*
- * We may be single-stepping an emulated instruction. If the emulation
- * has been completed in the kernel, we can return to userspace with a
- * KVM_EXIT_DEBUG, otherwise userspace needs to complete its
- * emulation first.
- */
-static int handle_trap_exceptions(struct kvm_vcpu *vcpu)
-{
-	int handled;
-
-	/*
-	 * See ARM ARM B1.14.1: "Hyp traps on instructions
-	 * that fail their condition code check"
-	 */
-	if (!kvm_condition_valid(vcpu)) {
-		kvm_incr_pc(vcpu);
-		handled = 1;
-	} else {
-		exit_handle_fn exit_handler;
-
-		exit_handler = kvm_get_exit_handler(vcpu);
-		handled = exit_handler(vcpu);
-	}
-
-	return handled;
-}
 
 /*
  * Return > 0 to return to guest, < 0 on error, 0 (and set exit_reason) on

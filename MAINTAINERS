@@ -14007,6 +14007,7 @@ F:	arch/arm64/include/uapi/asm/kvm*
 F:	include/kvm/arm64/
 F:	include/uapi/arch/arm64/asm/kvm*
 F:	arch/arm64/kvm/
+F:	virt/kvm/arm64/
 F:	include/kvm/arm_*
 F:	tools/testing/selftests/kvm/*/arm64/
 F:	tools/testing/selftests/kvm/arm64/
