@@ -37,24 +37,11 @@
 #include <kvm/arm_arch_timer.h>
 #include <kvm/arm_pmu.h>
 
+#include <kvm/arm64/kvm_host.h>
+
 #define KVM_MAX_VCPUS VGIC_V3_MAX_CPUS
 
-#define KVM_VCPU_MAX_FEATURES 9
 #define KVM_VCPU_VALID_FEATURES	(BIT(KVM_VCPU_MAX_FEATURES) - 1)
-
-#define KVM_REQ_SLEEP \
-	KVM_ARCH_REQ_FLAGS(0, KVM_REQUEST_WAIT | KVM_REQUEST_NO_WAKEUP)
-#define KVM_REQ_IRQ_PENDING		KVM_ARCH_REQ(1)
-#define KVM_REQ_VCPU_RESET		KVM_ARCH_REQ(2)
-#define KVM_REQ_RECORD_STEAL		KVM_ARCH_REQ(3)
-#define KVM_REQ_RELOAD_GICv4		KVM_ARCH_REQ(4)
-#define KVM_REQ_RELOAD_PMU		KVM_ARCH_REQ(5)
-#define KVM_REQ_SUSPEND			KVM_ARCH_REQ(6)
-#define KVM_REQ_RESYNC_PMU_EL0		KVM_ARCH_REQ(7)
-#define KVM_REQ_NESTED_S2_UNMAP		KVM_ARCH_REQ(8)
-#define KVM_REQ_GUEST_HYP_IRQ_PENDING	KVM_ARCH_REQ(9)
-#define KVM_REQ_MAP_L1_VNCR_EL2		KVM_ARCH_REQ(10)
-#define KVM_REQ_VGIC_PROCESS_UPDATE	KVM_ARCH_REQ(11)
 
 #define KVM_DIRTY_LOG_MANUAL_CAPS   (KVM_DIRTY_LOG_MANUAL_PROTECT_ENABLE | \
 				     KVM_DIRTY_LOG_INITIALLY_SET)
@@ -324,35 +311,7 @@ struct kvm_arch {
 	/* Protects VM-scoped configuration data */
 	struct mutex config_lock;
 
-	/*
-	 * If we encounter a data abort without valid instruction syndrome
-	 * information, report this to user space.  User space can (and
-	 * should) opt in to this feature if KVM_CAP_ARM_NISV_TO_USER is
-	 * supported.
-	 */
-#define KVM_ARCH_FLAG_RETURN_NISV_IO_ABORT_TO_USER	0
-	/* Memory Tagging Extension enabled for the guest */
-#define KVM_ARCH_FLAG_MTE_ENABLED			1
-	/* At least one vCPU has ran in the VM */
-#define KVM_ARCH_FLAG_HAS_RAN_ONCE			2
-	/* The vCPU feature set for the VM is configured */
-#define KVM_ARCH_FLAG_VCPU_FEATURES_CONFIGURED		3
-	/* PSCI SYSTEM_SUSPEND enabled for the guest */
-#define KVM_ARCH_FLAG_SYSTEM_SUSPEND_ENABLED		4
-	/* VM counter offset */
-#define KVM_ARCH_FLAG_VM_COUNTER_OFFSET			5
-	/* Timer PPIs made immutable */
-#define KVM_ARCH_FLAG_TIMER_PPIS_IMMUTABLE		6
-	/* Initial ID reg values loaded */
-#define KVM_ARCH_FLAG_ID_REGS_INITIALIZED		7
-	/* Fine-Grained UNDEF initialised */
-#define KVM_ARCH_FLAG_FGU_INITIALIZED			8
-	/* SVE exposed to guest */
-#define KVM_ARCH_FLAG_GUEST_HAS_SVE			9
-	/* MIDR_EL1, REVIDR_EL1, and AIDR_EL1 are writable from userspace */
-#define KVM_ARCH_FLAG_WRITABLE_IMP_ID_REGS		10
-	/* Unhandled SEAs are taken to userspace */
-#define KVM_ARCH_FLAG_EXIT_SEA				11
+	/* VM-wide vCPU feature set */
 	unsigned long flags;
 
 	/* VM-wide vCPU feature set */
@@ -812,13 +771,6 @@ extern s64 kvm_nvhe_sym(hyp_physvirt_offset);
 extern u64 kvm_nvhe_sym(hyp_cpu_logical_map)[NR_CPUS];
 #define hyp_cpu_logical_map CHOOSE_NVHE_SYM(hyp_cpu_logical_map)
 
-struct vcpu_reset_state {
-	unsigned long	pc;
-	unsigned long	r0;
-	bool		be;
-	bool		reset;
-};
-
 struct vncr_tlb;
 
 struct kvm_vcpu_arch {
@@ -1020,41 +972,6 @@ struct kvm_vcpu_arch {
 /* pKVM VCPU setup completed */
 #define VCPU_PKVM_FINALIZED	__vcpu_single_flag(cflags, BIT(2))
 
-/* Exception pending */
-#define PENDING_EXCEPTION	__vcpu_single_flag(iflags, BIT(0))
-/*
- * PC increment. Overlaps with EXCEPT_MASK on purpose so that it can't
- * be set together with an exception...
- */
-#define INCREMENT_PC		__vcpu_single_flag(iflags, BIT(1))
-/* Target EL/MODE (not a single flag, but let's abuse the macro) */
-#define EXCEPT_MASK		__vcpu_single_flag(iflags, GENMASK(3, 1))
-
-/* Helpers to encode exceptions with minimum fuss */
-#define __EXCEPT_MASK_VAL	unpack_vcpu_flag(EXCEPT_MASK)
-#define __EXCEPT_SHIFT		__builtin_ctzl(__EXCEPT_MASK_VAL)
-#define __vcpu_except_flags(_f)	iflags, (_f << __EXCEPT_SHIFT), __EXCEPT_MASK_VAL
-
-/*
- * When PENDING_EXCEPTION is set, EXCEPT_MASK can take the following
- * values:
- *
- * For AArch32 EL1:
- */
-#define EXCEPT_AA32_UND		__vcpu_except_flags(0)
-#define EXCEPT_AA32_IABT	__vcpu_except_flags(1)
-#define EXCEPT_AA32_DABT	__vcpu_except_flags(2)
-/* For AArch64: */
-#define EXCEPT_AA64_EL1_SYNC	__vcpu_except_flags(0)
-#define EXCEPT_AA64_EL1_IRQ	__vcpu_except_flags(1)
-#define EXCEPT_AA64_EL1_FIQ	__vcpu_except_flags(2)
-#define EXCEPT_AA64_EL1_SERR	__vcpu_except_flags(3)
-/* For AArch64 with NV: */
-#define EXCEPT_AA64_EL2_SYNC	__vcpu_except_flags(4)
-#define EXCEPT_AA64_EL2_IRQ	__vcpu_except_flags(5)
-#define EXCEPT_AA64_EL2_FIQ	__vcpu_except_flags(6)
-#define EXCEPT_AA64_EL2_SERR	__vcpu_except_flags(7)
-
 /* Physical CPU not in supported_cpus */
 #define ON_UNSUPPORTED_CPU	__vcpu_single_flag(sflags, BIT(0))
 /* WFIT instruction trapped */
@@ -1215,7 +1132,6 @@ struct kvm_vcpu_stat {
 };
 
 unsigned long kvm_arm_num_regs(struct kvm_vcpu *vcpu);
-int kvm_arm_copy_reg_indices(struct kvm_vcpu *vcpu, u64 __user *indices);
 int kvm_arm_get_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg);
 int kvm_arm_set_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg);
 
@@ -1298,13 +1214,6 @@ int __init populate_sysreg_config(const struct sys_reg_desc *sr,
 int __init populate_nv_trap_config(void);
 
 void kvm_calculate_traps(struct kvm_vcpu *vcpu);
-
-/* MMIO helpers */
-void kvm_mmio_write_buf(void *buf, unsigned int len, unsigned long data);
-unsigned long kvm_mmio_read_buf(const void *buf, unsigned int len);
-
-int kvm_handle_mmio_return(struct kvm_vcpu *vcpu);
-int io_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa);
 
 /*
  * Returns true if a Performance Monitoring Interrupt (PMI), a.k.a. perf event,
@@ -1479,8 +1388,6 @@ struct kvm *kvm_arch_alloc_vm(void);
 #define __KVM_HAVE_ARCH_FLUSH_REMOTE_TLBS_RANGE
 
 #define kvm_vm_is_protected(kvm)	(is_protected_kvm_enabled() && (kvm)->arch.pkvm.is_protected)
-
-#define vcpu_is_protected(vcpu)		kvm_vm_is_protected((vcpu)->kvm)
 
 int kvm_arm_vcpu_finalize(struct kvm_vcpu *vcpu, int feature);
 bool kvm_arm_vcpu_is_finalized(struct kvm_vcpu *vcpu);

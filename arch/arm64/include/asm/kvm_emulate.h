@@ -16,12 +16,13 @@
 
 #include <asm/debug-monitors.h>
 #include <asm/esr.h>
-#include <asm/kvm_arm.h>
 #include <asm/kvm_hyp.h>
 #include <asm/kvm_nested.h>
 #include <asm/ptrace.h>
 #include <asm/cputype.h>
 #include <asm/virt.h>
+
+#include <kvm/arm64/kvm_arm.h>
 
 #define CURRENT_EL_SP_EL0_VECTOR	0x0
 #define CURRENT_EL_SP_ELx_VECTOR	0x200

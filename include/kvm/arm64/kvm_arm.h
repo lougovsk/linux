@@ -8,8 +8,9 @@
 #define __ARM64_KVM_ARM_H__
 
 #include <asm/esr.h>
-#include <asm/memory.h>
-#include <asm/sysreg.h>
+#include <linux/const.h>
+#include <linux/bits.h>
+#include <asm/sysreg-defs.h>
 #include <asm/types.h>
 
 /*

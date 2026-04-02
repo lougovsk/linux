@@ -27,6 +27,8 @@
 #include <asm/kvm_nested.h>
 #include <asm/sigcontext.h>
 
+#include <kvm/arm64/guest.h>
+
 #include "trace.h"
 
 const struct kvm_stats_desc kvm_vm_stats_desc[] = {

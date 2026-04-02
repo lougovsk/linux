@@ -12,7 +12,7 @@
 
 #include <asm/debug-monitors.h>
 #include <asm/kvm_asm.h>
-#include <asm/kvm_arm.h>
+#include <kvm/arm64/kvm_arm.h>
 #include <asm/kvm_emulate.h>
 
 static int cpu_has_spe(u64 dfr0)
