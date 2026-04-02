@@ -107,8 +107,8 @@ function parse_bitdef(reg, field, bitdef, _bits)
 }
 
 BEGIN {
-	print "#ifndef __ASM_SYSREG_DEFS_H"
-	print "#define __ASM_SYSREG_DEFS_H"
+	print "#ifndef __ASM_SYSREG_GEN_DEFS_H"
+	print "#define __ASM_SYSREG_GEN_DEFS_H"
 	print ""
 	print "/* Generated file - do not edit */"
 	print ""
@@ -121,7 +121,7 @@ END {
 	if (__current_block_depth != 0)
 		fatal("Missing terminator for " block_current() " block")
 
-	print "#endif /* __ASM_SYSREG_DEFS_H */"
+	print "#endif /* __ASM_SYSREG_GEN_DEFS_H */"
 }
 
 # skip blank lines and comment lines

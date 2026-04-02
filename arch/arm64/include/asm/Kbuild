@@ -17,4 +17,4 @@ generic-y += parport.h
 generic-y += user.h
 
 generated-y += cpucap-defs.h
-generated-y += sysreg-defs.h
+generated-y += sysreg-gen-defs.h
