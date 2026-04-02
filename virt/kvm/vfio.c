@@ -35,15 +35,15 @@ struct kvm_vfio {
 	bool noncoherent;
 };
 
-static void kvm_vfio_file_set_kvm(struct file *file, struct kvm *kvm)
+static void kvm_vfio_file_set_kvm(struct file *file, struct kvm *kvm, struct module *module)
 {
-	void (*fn)(struct file *file, struct kvm *kvm);
+	void (*fn)(struct file *file, struct kvm *kvm, struct module *kvm_module);
 
 	fn = symbol_get(vfio_file_set_kvm);
 	if (!fn)
 		return;
 
-	fn(file, kvm);
+	fn(file, kvm, module);
 
 	symbol_put(vfio_file_set_kvm);
 }
@@ -142,6 +142,7 @@ static void kvm_vfio_update_coherency(struct kvm_device *dev)
 
 static int kvm_vfio_file_add(struct kvm_device *dev, unsigned int fd)
 {
+	struct module *module;
 	struct kvm_vfio *kv = dev->private;
 	struct kvm_vfio_file *kvf;
 	struct file *filp;
@@ -157,6 +158,7 @@ static int kvm_vfio_file_add(struct kvm_device *dev, unsigned int fd)
 		goto out_fput;
 	}
 
+	module = filp->f_op->owner;
 	mutex_lock(&kv->lock);
 
 	list_for_each_entry(kvf, &kv->file_list, node) {
@@ -175,7 +177,7 @@ static int kvm_vfio_file_add(struct kvm_device *dev, unsigned int fd)
 	kvf->file = get_file(filp);
 	list_add_tail(&kvf->node, &kv->file_list);
 
-	kvm_vfio_file_set_kvm(kvf->file, dev->kvm);
+	kvm_vfio_file_set_kvm(kvf->file, dev->kvm, module);
 	kvm_vfio_update_coherency(dev);
 
 out_unlock:
@@ -207,7 +209,7 @@ static int kvm_vfio_file_del(struct kvm_device *dev, unsigned int fd)
 #ifdef CONFIG_SPAPR_TCE_IOMMU
 		kvm_spapr_tce_release_vfio_group(dev->kvm, kvf);
 #endif
-		kvm_vfio_file_set_kvm(kvf->file, NULL);
+		kvm_vfio_file_set_kvm(kvf->file, NULL, NULL);
 		fput(kvf->file);
 		kfree(kvf);
 		ret = 0;
@@ -330,7 +332,7 @@ static void kvm_vfio_release(struct kvm_device *dev)
 #ifdef CONFIG_SPAPR_TCE_IOMMU
 		kvm_spapr_tce_release_vfio_group(dev->kvm, kvf);
 #endif
-		kvm_vfio_file_set_kvm(kvf->file, NULL);
+		kvm_vfio_file_set_kvm(kvf->file, NULL, NULL);
 		fput(kvf->file);
 		list_del(&kvf->node);
 		kfree(kvf);
