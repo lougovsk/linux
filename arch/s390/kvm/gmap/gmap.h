@@ -250,4 +250,15 @@ static inline bool gmap_is_shadow_valid(struct gmap *sg, union asce asce, int ed
 	return sg->guest_asce.val == asce.val && sg->edat_level == edat_level;
 }
 
+int gmap_get_dirty_log(struct kvm *kvm, struct kvm_dirty_log *log);
+int gmap_prepare_memory_region(struct kvm *kvm,
+			       const struct kvm_memory_slot *old,
+			       struct kvm_memory_slot *new,
+			       enum kvm_mr_change change);
+void gmap_commit_memory_region(struct kvm *kvm,
+			       struct kvm_memory_slot *old,
+			       const struct kvm_memory_slot *new,
+			       enum kvm_mr_change change);
+bool gmap_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range);
+
 #endif /* ARCH_KVM_GMAP_GMAP_H */

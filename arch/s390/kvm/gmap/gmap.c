@@ -21,13 +21,12 @@
 
 #include "dat.h"
 #include "gmap.h"
+#ifdef KVM_S390_ARM64
+#include "arm.h"
+#else
 #include "s390.h"
+#endif
 #include "faultin.h"
-
-static inline bool kvm_s390_is_in_sie(struct kvm_vcpu *vcpu)
-{
-	return vcpu->arch.sie_block->prog0c & PROG_IN_SIE;
-}
 
 static int gmap_limit_to_type(gfn_t limit)
 {
@@ -253,6 +252,7 @@ int s390_replace_asce(struct gmap *gmap)
 
 bool _gmap_unmap_prefix(struct gmap *gmap, gfn_t gfn, gfn_t end, bool hint)
 {
+#ifndef KVM_S390_ARM64
 	struct kvm *kvm = gmap->kvm;
 	struct kvm_vcpu *vcpu;
 	gfn_t prefix_gfn;
@@ -271,6 +271,7 @@ bool _gmap_unmap_prefix(struct gmap *gmap, gfn_t gfn, gfn_t end, bool hint)
 			kvm_s390_sync_request(KVM_REQ_REFRESH_GUEST_PREFIX, vcpu);
 		}
 	}
+#endif /* ifdef KVM_S390_ARM64 */
 	return true;
 }
 
