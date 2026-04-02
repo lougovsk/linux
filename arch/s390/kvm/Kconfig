@@ -17,39 +17,8 @@ menuconfig VIRTUALIZATION
 if VIRTUALIZATION
 
 config KVM
-	def_tristate y
-	prompt "Kernel-based Virtual Machine (KVM) support"
-	select HAVE_KVM_CPU_RELAX_INTERCEPT
-	select KVM_ASYNC_PF
-	select KVM_ASYNC_PF_SYNC
-	select KVM_COMMON
-	select HAVE_KVM_IRQCHIP
-	select HAVE_KVM_IRQ_ROUTING
-	select HAVE_KVM_INVALID_WAKEUPS
-	select HAVE_KVM_NO_POLL
-	select KVM_VFIO
-	select VIRT_XFER_TO_GUEST_WORK
-	select KVM_MMU_LOCKLESS_AGING
-	help
-	  Support hosting paravirtualized guest machines using the SIE
-	  virtualization capability on the mainframe. This should work
-	  on any 64bit machine.
+	tristate
 
-	  This module provides access to the hardware capabilities through
-	  a character device node named /dev/kvm.
-
-	  To compile this as a module, choose M here: the module
-	  will be called kvm.
-
-	  If unsure, say N.
-
-config KVM_S390_UCONTROL
-	bool "Userspace controlled virtual machines"
-	depends on KVM
-	help
-	  Allow CAP_SYS_ADMIN users to create KVM virtual machines that are
-	  controlled by userspace.
-
-	  If unsure, say N.
+source "arch/s390/kvm/s390/Kconfig"
 
 endif # VIRTUALIZATION
