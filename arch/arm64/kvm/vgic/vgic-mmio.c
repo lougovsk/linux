@@ -48,6 +48,17 @@ unsigned long vgic_mmio_read_group(struct kvm_vcpu *vcpu,
 	u32 value = 0;
 	int i;
 
+	/*
+	 * Revision 1 and below: groups are not guest-configurable.
+	 * GICv2 reports all interrupts as group 0 (RAZ).
+	 * GICv3 reports all interrupts as group 1 (RAO).
+	 */
+	if (vgic_get_implementation_rev(vcpu) < KVM_VGIC_IMP_REV_2) {
+		if (vcpu->kvm->arch.vgic.vgic_model == KVM_DEV_TYPE_ARM_VGIC_V3)
+			return -1UL;
+		return 0;
+	}
+
 	/* Loop over all IRQs affected by this read */
 	for (i = 0; i < len * 8; i++) {
 		struct vgic_irq *irq = vgic_get_vcpu_irq(vcpu, intid + i);
@@ -72,6 +83,10 @@ void vgic_mmio_write_group(struct kvm_vcpu *vcpu, gpa_t addr,
 	u32 intid = VGIC_ADDR_TO_INTID(addr, 1);
 	int i;
 	unsigned long flags;
+
+	/* Revision 1 and below: groups are not guest-configurable. */
+	if (vgic_get_implementation_rev(vcpu) < KVM_VGIC_IMP_REV_2)
+		return;
 
 	for (i = 0; i < len * 8; i++) {
 		struct vgic_irq *irq = vgic_get_vcpu_irq(vcpu, intid + i);
