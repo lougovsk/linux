@@ -51,6 +51,7 @@
 
 #include <linux/irqchip/arm-gic-v5.h>
 
+#include "vgic/vgic.h"
 #include "sys_regs.h"
 
 static enum kvm_mode kvm_mode = KVM_MODE_DEFAULT;
@@ -1474,6 +1475,12 @@ int kvm_vm_ioctl_irq_line(struct kvm *kvm, struct kvm_irq_level *irq_level,
 	irq_num = (irq >> KVM_ARM_IRQ_NUM_SHIFT) & KVM_ARM_IRQ_NUM_MASK;
 
 	trace_kvm_irq_line(irq_type, vcpu_id, irq_num, irq_level->level);
+
+	if (irqchip_in_kernel(kvm)) {
+		int ret = vgic_lazy_init(kvm);
+		if (ret)
+			return ret;
+	}
 
 	switch (irq_type) {
 	case KVM_ARM_IRQ_TYPE_CPU:
