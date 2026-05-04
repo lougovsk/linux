@@ -1021,7 +1021,9 @@ out_free_pgtable:
 
 void kvm_uninit_stage2_mmu(struct kvm *kvm)
 {
-	kvm_free_stage2_pgd(&kvm->arch.mmu);
+	lockdep_assert_held_write(&kvm->mmu_lock);
+
+	kvm_free_stage2_pgd_locked(&kvm->arch.mmu);
 	kvm_mmu_free_memory_cache(&kvm->arch.mmu.split_page_cache);
 }
 
@@ -1095,12 +1097,14 @@ void stage2_unmap_vm(struct kvm *kvm)
 	srcu_read_unlock(&kvm->srcu, idx);
 }
 
-void kvm_free_stage2_pgd(struct kvm_s2_mmu *mmu)
+static void __kvm_free_stage2_pgd(struct kvm_s2_mmu *mmu, bool locked)
 {
 	struct kvm *kvm = kvm_s2_mmu_to_kvm(mmu);
 	struct kvm_pgtable *pgt = NULL;
 
-	write_lock(&kvm->mmu_lock);
+	if (!locked)
+		write_lock(&kvm->mmu_lock);
+
 	pgt = mmu->pgt;
 	if (pgt) {
 		mmu->pgd_phys = 0;
@@ -1111,12 +1115,23 @@ void kvm_free_stage2_pgd(struct kvm_s2_mmu *mmu)
 	if (kvm_is_nested_s2_mmu(kvm, mmu))
 		kvm_init_nested_s2_mmu(mmu);
 
-	write_unlock(&kvm->mmu_lock);
+	if (!locked)
+		write_unlock(&kvm->mmu_lock);
 
 	if (pgt) {
 		kvm_stage2_destroy(pgt);
 		kfree(pgt);
 	}
+}
+
+void kvm_free_stage2_pgd(struct kvm_s2_mmu *mmu)
+{
+	__kvm_free_stage2_pgd(mmu, false);
+}
+
+void kvm_free_stage2_pgd_locked(struct kvm_s2_mmu *mmu)
+{
+	__kvm_free_stage2_pgd(mmu, true);
 }
 
 static void hyp_mc_free_fn(void *addr, void *mc)
