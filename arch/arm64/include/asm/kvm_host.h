@@ -192,6 +192,7 @@ struct kvm_s2_mmu {
 	 * Protected by kvm->slots_lock.
 	 */
 	struct kvm_mmu_memory_cache split_page_cache;
+	int is_freeing;
 	uint64_t split_page_chunk_size;
 
 	struct kvm_arch *arch;

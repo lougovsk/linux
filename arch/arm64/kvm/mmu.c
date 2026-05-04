@@ -1004,6 +1004,8 @@ int kvm_init_stage2_mmu(struct kvm *kvm, struct kvm_s2_mmu *mmu, unsigned long t
 	mmu->split_page_chunk_size = KVM_ARM_EAGER_SPLIT_CHUNK_SIZE_DEFAULT;
 	mmu->split_page_cache.gfp_zero = __GFP_ZERO;
 
+	mmu->is_freeing = 0;
+
 	mmu->pgd_phys = __pa(pgt->pgd);
 
 	if (kvm_is_nested_s2_mmu(kvm, mmu))
@@ -1021,10 +1023,24 @@ out_free_pgtable:
 
 void kvm_uninit_stage2_mmu(struct kvm *kvm)
 {
+	int is_freeing;
+	ktime_t s;
+
 	lockdep_assert_held_write(&kvm->mmu_lock);
 
 	kvm_free_stage2_pgd_locked(&kvm->arch.mmu);
+
+	is_freeing = ++kvm->arch.mmu.is_freeing;
+	s = ktime_get();
+
+	/* Sleep for 10ms */
+	while (ktime_to_ns(ktime_get()) - ktime_to_ns(s) < 1E7) {}
+
+	WARN(is_freeing > 1, "detected double-free of split page cache");
+
 	kvm_mmu_free_memory_cache(&kvm->arch.mmu.split_page_cache);
+
+	kvm->arch.mmu.is_freeing--;
 }
 
 static void stage2_unmap_memslot(struct kvm *kvm,
