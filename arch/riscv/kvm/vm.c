@@ -38,7 +38,9 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 
 	r = kvm_riscv_gstage_vmid_init(kvm);
 	if (r) {
+		spin_lock(&kvm->mmu_lock);
 		kvm_riscv_mmu_free_pgd(kvm);
+		spin_unlock(&kvm->mmu_lock);
 		return r;
 	}
 

@@ -340,7 +340,10 @@ void kvm_flush_remote_tlbs_memslot(struct kvm *kvm,
 
 static void kvm_flush_shadow_all(struct kvm *kvm)
 {
+	KVM_MMU_LOCK(kvm);
 	kvm_arch_flush_shadow_all(kvm);
+	KVM_MMU_UNLOCK(kvm);
+
 	kvm_arch_guest_memory_reclaimed(kvm);
 }
 
