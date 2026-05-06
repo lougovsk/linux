@@ -1610,7 +1610,13 @@ static int gmem_abort(const struct kvm_s2_fault_desc *s2fd)
 	if (ret) {
 		kvm_prepare_memory_fault_exit(s2fd->vcpu, s2fd->fault_ipa, PAGE_SIZE,
 					      write_fault, exec_fault, false);
-		return ret;
+		switch (ret) {
+		case -EFAULT:
+		case -EHWPOISON:
+			return ret;
+		default:
+			return -EFAULT;
+		}
 	}
 
 	if (!(s2fd->memslot->flags & KVM_MEM_READONLY))

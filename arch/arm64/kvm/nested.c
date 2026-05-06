@@ -1320,8 +1320,14 @@ static int kvm_translate_vncr(struct kvm_vcpu *vcpu, bool *is_gmem)
 		ret = kvm_gmem_get_pfn(vcpu->kvm, memslot, gfn, &pfn, &page, NULL);
 		if (ret) {
 			kvm_prepare_memory_fault_exit(vcpu, vt->wr.pa, PAGE_SIZE,
-					      write_fault, false, false);
-			return ret;
+						      write_fault, false, false);
+			switch (ret) {
+			case -EFAULT:
+			case -EHWPOISON:
+				return ret;
+			default:
+				return -EFAULT;
+			}
 		}
 	}
 
@@ -1401,23 +1407,19 @@ int kvm_handle_vncr_abort(struct kvm_vcpu *vcpu)
 
 		switch (ret) {
 		case -EAGAIN:
+		case -ENOMEM:
 			/* Let's try again... */
 			break;
-		case -ENOMEM:
+		case -EFAULT:
+		case -EHWPOISON:
 			/*
 			 * For guest_memfd, this indicates that it failed to
 			 * create a folio to back the memory. Inform userspace.
 			 */
 			if (is_gmem)
-				return 0;
-			/* Otherwise, let's try again... */
-			break;
-		case -EFAULT:
-		case -EIO:
-		case -EHWPOISON:
-			if (is_gmem)
-				return 0;
+				return ret;
 			fallthrough;
+		case -EIO:
 		case -EINVAL:
 		case -ENOENT:
 		case -EACCES:
