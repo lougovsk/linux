@@ -160,6 +160,11 @@ void pkvm_remove_mappings(void *from, void *to)
 	hyp_spin_unlock(&pkvm_pgd_lock);
 }
 
+int __hyp_allocator_map(void *va, phys_addr_t phys)
+{
+	return __pkvm_create_mappings((unsigned long)va, PAGE_SIZE, phys, PAGE_HYP);
+}
+
 int hyp_back_vmemmap(phys_addr_t back)
 {
 	unsigned long i, start, size, end = 0;
