@@ -859,7 +859,7 @@ int __pkvm_init_vm(struct kvm *host_kvm, unsigned long vm_hva,
 
 err_remove_mappings:
 	unmap_donated_memory(hyp_vm, vm_size);
-	unmap_donated_memory(pgd, pgd_size);
+	unmap_donated_memory_noclear(pgd, pgd_size);
 err_unpin_kvm:
 	hyp_unpin_shared_mem(host_kvm, host_kvm + 1);
 	return ret;
