@@ -85,6 +85,29 @@ void __init kvm_hyp_reserve(void)
 		 hyp_mem_base);
 }
 
+static int pkvm_hyp_topup(enum pkvm_topup_id id, unsigned long nr_pages)
+{
+	struct arm_smccc_res res;
+	struct kvm_hyp_memcache mc;
+	int ret;
+
+	init_hyp_memcache(&mc);
+
+	ret = topup_hyp_memcache(&mc, nr_pages);
+	if (ret)
+		return ret;
+
+	arm_smccc_1_1_hvc(KVM_HOST_SMCCC_FUNC(__pkvm_hyp_topup), id, mc.head,
+			  mc.nr_pages, &res);
+	WARN_ON(res.a0 != SMCCC_RET_SUCCESS);
+
+	mc.head = res.a2;
+	mc.nr_pages = res.a3;
+	free_hyp_memcache(&mc);
+
+	return res.a1;
+}
+
 static void __pkvm_destroy_hyp_vm(struct kvm *kvm)
 {
 	if (pkvm_hyp_vm_is_created(kvm)) {
