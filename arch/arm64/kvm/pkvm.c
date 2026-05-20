@@ -143,6 +143,9 @@ static int pkvm_handle_hyp_req(struct pkvm_hyp_req *req)
 	case PKVM_HYP_REQ_HYP_ALLOC:
 		ret = pkvm_hyp_topup(PKVM_TOPUP_HYP_ALLOC, req->mem.nr_pages);
 		break;
+	case PKVM_HYP_REQ_HYP_ALLOC_SELFTEST:
+		ret = pkvm_hyp_topup(PKVM_TOPUP_HYP_ALLOC_SELFTEST, req->mem.nr_pages);
+		break;
 	}
 
 	trace_kvm_handle_pkvm_hyp_req(req, ret);
@@ -348,6 +351,19 @@ static int __init pkvm_drop_host_privileges(void)
 	return ret;
 }
 
+static void __init pkvm_selftests(void)
+{
+#ifdef CONFIG_NVHE_EL2_DEBUG
+	int ret = pkvm_call_hyp_req(__pkvm_hyp_alloc_selftest);
+
+	if (ret)
+		kvm_err("pKVM hyp allocator selftest failed (%d)\n", ret);
+	else
+		WARN_ON(pkvm_hyp_reclaim(PKVM_TOPUP_HYP_ALLOC_SELFTEST, ULONG_MAX) !=
+			6 /* SELFTEST_MAX_PAGES */);
+#endif
+}
+
 static int __init finalize_pkvm(void)
 {
 	int ret;
@@ -367,6 +383,9 @@ static int __init finalize_pkvm(void)
 	ret = pkvm_drop_host_privileges();
 	if (ret)
 		pr_err("Failed to finalize Hyp protection: %d\n", ret);
+
+	if (!ret)
+		pkvm_selftests();
 
 	return ret;
 }
