@@ -8,6 +8,7 @@
 #include <asm/kvm_emulate.h>
 #include <trace/events/kvm.h>
 
+#define CREATE_TRACE_POINTS
 #include "trace.h"
 
 void kvm_mmio_write_buf(void *buf, unsigned int len, unsigned long data)

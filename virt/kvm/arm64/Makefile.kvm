@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Makefile for Kernel-based Virtual Machine modules for arm64 guests
+#
+KVM_ARM64 ?= $(KVM)/arm64
+
+shared-arm64-obj := \
+	$(KVM_ARM64)/arm.o \
+	$(KVM_ARM64)/guest.o \
+	$(KVM_ARM64)/handle_exit.o \
+	$(KVM_ARM64)/mmio.o \
+

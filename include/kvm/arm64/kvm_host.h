@@ -28,6 +28,12 @@ struct vcpu_reset_state {
 	bool		reset;
 };
 
+/* Implemented in virt/kvm/arm64/arm.c */
+int kvm_vcpu_init_check_features(struct kvm_vcpu *vcpu,
+				 const struct kvm_vcpu_init *init);
+bool kvm_vcpu_init_changed(struct kvm_vcpu *vcpu,
+			   const struct kvm_vcpu_init *init);
+
 /* MMIO helpers */
 void kvm_mmio_write_buf(void *buf, unsigned int len, unsigned long data);
 unsigned long kvm_mmio_read_buf(const void *buf, unsigned int len);
@@ -101,5 +107,8 @@ int io_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa);
 #define KVM_ARCH_FLAG_WRITABLE_IMP_ID_REGS		10
 /* Unhandled SEAs are taken to userspace */
 #define KVM_ARCH_FLAG_EXIT_SEA				11
+
+/* Implemented in architecture specific code */
+unsigned long system_supported_vcpu_features(void);
 
 #endif /* __KVM_ARM64_KVM_HOST_H */
