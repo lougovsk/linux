@@ -3,11 +3,12 @@
 gen := arch/$(ARCH)/include/generated
 kapi := $(gen)/asm
 
-kapisyshdr-y := cpucap-defs.h kernel-hwcap.h sysreg-defs.h
+include $(srctree)/arch/arm64/tools/Makefile.sysreg
 
+kapisyshdr-y := cpucap-defs.h kernel-hwcap.h
 kapi-hdrs-y := $(addprefix $(kapi)/, $(kapisyshdr-y))
 
-targets += $(addprefix ../../../, $(kapi-hdrs-y))
+targets += $(addprefix ../../../, $(kapi)/cpucap-defs.h)
 
 PHONY += kapi
 
@@ -21,14 +22,9 @@ quiet_cmd_gen_cpucaps = GEN     $@
 quiet_cmd_gen_kernel_hwcap = GEN     $@
       cmd_gen_kernel_hwcap = mkdir -p $(dir $@); /bin/sh -e $(real-prereqs) > $@
 
-quiet_cmd_gen_sysreg = GEN     $@
-      cmd_gen_sysreg = mkdir -p $(dir $@); $(AWK) -f $(real-prereqs) > $@
 
 $(kapi)/cpucap-defs.h: $(src)/gen-cpucaps.awk $(src)/cpucaps FORCE
 	$(call if_changed,gen_cpucaps)
 
 $(kapi)/kernel-hwcap.h: $(src)/gen-kernel-hwcaps.sh $(srctree)/arch/arm64/include/uapi/asm/hwcap.h FORCE
 	$(call if_changed,gen_kernel_hwcap)
-
-$(kapi)/sysreg-defs.h: $(src)/gen-sysreg.awk $(src)/sysreg FORCE
-	$(call if_changed,gen_sysreg)
