@@ -3,3 +3,4 @@ shared-uapi-src := arch/arm64/include/uapi/asm
 
 shared-uapi-y += kvm.h
 shared-uapi-y += sve_context.h
+shared-uapi-y += pstate.h
