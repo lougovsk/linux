@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 
-#ifndef __ASM_SYSREG_DEFS_H
-#define __ASM_SYSREG_DEFS_H
+#ifndef __ARM64_ASM_SYSREG_DEFS_H
+#define __ARM64_ASM_SYSREG_DEFS_H
 
 #include <linux/bits.h>
 
@@ -969,4 +969,4 @@
 		 FIELD_PREP(reg##_##field##_MASK,	\
 			    SYS_FIELD_VALUE(reg, field, val))
 #endif /* __ASSEMBLER__ */
-#endif	/* __ASM_SYSREG_DEFS_H */
+#endif /* __ARM64_ASM_SYSREG_DEFS_H */

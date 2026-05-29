@@ -3,8 +3,8 @@
  * Copyright (C) 2012 ARM Ltd.
  */
 
-#ifndef __ASM_BRK_IMM_H
-#define __ASM_BRK_IMM_H
+#ifndef __ARM64_ASM_BRK_IMM_H
+#define __ARM64_ASM_BRK_IMM_H
 
 /*
  * #imm16 values used for BRK instruction generation
@@ -39,4 +39,4 @@
 #define CFI_BRK_IMM_BASE		0x8000
 #define CFI_BRK_IMM_MASK		(CFI_BRK_IMM_TARGET | CFI_BRK_IMM_TYPE)
 
-#endif
+#endif /* __ARM64_ASM_BRK_IMM_H */
