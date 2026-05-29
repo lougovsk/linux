@@ -100,6 +100,8 @@ alternative_cb_end
 #include <asm/kvm_host.h>
 #include <asm/kvm_nested.h>
 
+#include <kvm/arm64/kvm_mmu.h>
+
 void kvm_update_va_mask(struct alt_instr *alt,
 			__le32 *origptr, __le32 *updptr, int nr_inst);
 void kvm_compute_layout(void);
@@ -142,12 +144,6 @@ static __always_inline unsigned long __kern_hyp_va(unsigned long v)
 
 extern u32 __hyp_va_bits;
 
-/*
- * We currently support using a VM-specified IPA size. For backward
- * compatibility, the default IPA size is fixed to 40bits.
- */
-#define KVM_PHYS_SHIFT	(40)
-
 #define kvm_phys_shift(mmu)		VTCR_EL2_IPA((mmu)->vtcr)
 #define kvm_phys_size(mmu)		(_AC(1, ULL) << kvm_phys_shift(mmu))
 #define kvm_phys_mask(mmu)		(kvm_phys_size(mmu) - _AC(1, ULL))
@@ -161,9 +157,6 @@ int create_hyp_mappings(void *from, void *to, enum kvm_pgtable_prot prot);
 int __create_hyp_mappings(unsigned long start, unsigned long size,
 			  unsigned long phys, enum kvm_pgtable_prot prot);
 int hyp_alloc_private_va_range(size_t size, unsigned long *haddr);
-int create_hyp_io_mappings(phys_addr_t phys_addr, size_t size,
-			   void __iomem **kaddr,
-			   void __iomem **haddr);
 int create_hyp_exec_mappings(phys_addr_t phys_addr, size_t size,
 			     void **haddr);
 int create_hyp_stack(phys_addr_t phys_addr, unsigned long *haddr);
@@ -178,8 +171,6 @@ void stage2_unmap_vm(struct kvm *kvm);
 int kvm_init_stage2_mmu(struct kvm *kvm, struct kvm_s2_mmu *mmu, unsigned long type);
 void kvm_uninit_stage2_mmu(struct kvm *kvm);
 void kvm_free_stage2_pgd(struct kvm_s2_mmu *mmu);
-int kvm_phys_addr_ioremap(struct kvm *kvm, phys_addr_t guest_ipa,
-			  phys_addr_t pa, unsigned long size, bool writable);
 
 int kvm_handle_guest_sea(struct kvm_vcpu *vcpu);
 int kvm_handle_guest_abort(struct kvm_vcpu *vcpu);
@@ -267,34 +258,6 @@ static inline unsigned int kvm_get_vmid_bits(void)
 
 	return get_vmid_bits(reg);
 }
-
-/*
- * We are not in the kvm->srcu critical section most of the time, so we take
- * the SRCU read lock here. Since we copy the data from the user page, we
- * can immediately drop the lock again.
- */
-static inline int kvm_read_guest_lock(struct kvm *kvm,
-				      gpa_t gpa, void *data, unsigned long len)
-{
-	int srcu_idx = srcu_read_lock(&kvm->srcu);
-	int ret = kvm_read_guest(kvm, gpa, data, len);
-
-	srcu_read_unlock(&kvm->srcu, srcu_idx);
-
-	return ret;
-}
-
-static inline int kvm_write_guest_lock(struct kvm *kvm, gpa_t gpa,
-				       const void *data, unsigned long len)
-{
-	int srcu_idx = srcu_read_lock(&kvm->srcu);
-	int ret = kvm_write_guest(kvm, gpa, data, len);
-
-	srcu_read_unlock(&kvm->srcu, srcu_idx);
-
-	return ret;
-}
-
 #define kvm_phys_to_vttbr(addr)		phys_to_ttbr(addr)
 
 /*

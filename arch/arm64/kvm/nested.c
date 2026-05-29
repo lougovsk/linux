@@ -9,7 +9,7 @@
 #include <linux/kvm_host.h>
 
 #include <asm/fixmap.h>
-#include <asm/kvm_arm.h>
+#include <kvm/arm64/kvm_arm.h>
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_mmu.h>
 #include <asm/kvm_nested.h>

@@ -10,7 +10,7 @@
 #include <asm/alternative.h>
 #include <asm/assembler.h>
 #include <asm/cpufeature.h>
-#include <asm/kvm_arm.h>
+#include <kvm/arm64/kvm_arm.h>
 #include <asm/kvm_asm.h>
 #include <asm/mmu.h>
 #include <asm/spectre.h>
