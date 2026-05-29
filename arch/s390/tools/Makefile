@@ -6,6 +6,8 @@
 kapi := arch/$(ARCH)/include/generated/asm
 kapi-hdrs-y := $(kapi)/facility-defs.h $(kapi)/dis-defs.h
 
+include $(srctree)/arch/arm64/tools/Makefile.sysreg
+
 PHONY += kapi
 
 kapi:	$(kapi-hdrs-y)
