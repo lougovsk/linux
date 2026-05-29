@@ -138,6 +138,8 @@ zfcpdump:
 
 archheaders:
 	$(Q)$(MAKE) $(build)=$(syscalls) all
+	$(Q)$(MAKE) $(asm-generic)=$(objtree)/include/generated/uapi/arch/arm64/asm \
+		kbuild-file=$(srctree)/include/uapi/arch/arm64/asm/Kbuild
 
 archprepare:
 	$(Q)$(MAKE) $(build)=$(tools) kapi $(extra_tools)

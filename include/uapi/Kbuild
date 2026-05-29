@@ -12,3 +12,7 @@ ifeq ($(wildcard $(objtree)/arch/$(SRCARCH)/include/generated/uapi/asm/kvm_para.
 no-export-headers += linux/kvm_para.h
 endif
 endif
+
+ifneq ($(ARCH),s390)
+no-export-headers += arch/%
+endif

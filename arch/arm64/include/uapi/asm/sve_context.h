@@ -6,7 +6,9 @@
  * Do not make direct use of header or its definitions.
  */
 
-#ifndef _UAPI__ASM_SVE_CONTEXT_H
+#ifndef __ARM64_SVE_CONTEXT_SHARED_H__
+#define __ARM64_SVE_CONTEXT_SHARED_H__
+
 #define _UAPI__ASM_SVE_CONTEXT_H
 
 #include <linux/types.h>
