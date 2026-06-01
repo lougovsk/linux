@@ -1070,35 +1070,36 @@ static u64 reset_pmcr(struct kvm_vcpu *vcpu, const struct sys_reg_desc *r)
 	return __vcpu_sys_reg(vcpu, r->reg);
 }
 
-static bool check_pmu_access_disabled(struct kvm_vcpu *vcpu, u64 flags)
+static bool __check_pmuserenr(struct kvm_vcpu *vcpu, u64 flags)
 {
 	u64 reg = __vcpu_sys_reg(vcpu, PMUSERENR_EL0);
-	bool enabled = (reg & flags) || vcpu_mode_priv(vcpu);
 
-	if (!enabled)
-		kvm_inject_undefined(vcpu);
+	/* As the name implies, PMUSERENR_EL0 only applies to accesses from EL0. */
+	if (vcpu_mode_priv(vcpu) || (reg & flags))
+		return false;
 
-	return !enabled;
+	kvm_inject_undefined(vcpu);
+	return true;
 }
 
 static bool pmu_access_el0_disabled(struct kvm_vcpu *vcpu)
 {
-	return check_pmu_access_disabled(vcpu, ARMV8_PMU_USERENR_EN);
+	return __check_pmuserenr(vcpu, ARMV8_PMU_USERENR_EN);
 }
 
 static bool pmu_write_swinc_el0_disabled(struct kvm_vcpu *vcpu)
 {
-	return check_pmu_access_disabled(vcpu, ARMV8_PMU_USERENR_SW | ARMV8_PMU_USERENR_EN);
+	return __check_pmuserenr(vcpu, ARMV8_PMU_USERENR_SW | ARMV8_PMU_USERENR_EN);
 }
 
 static bool pmu_access_cycle_counter_el0_disabled(struct kvm_vcpu *vcpu)
 {
-	return check_pmu_access_disabled(vcpu, ARMV8_PMU_USERENR_CR | ARMV8_PMU_USERENR_EN);
+	return __check_pmuserenr(vcpu, ARMV8_PMU_USERENR_CR | ARMV8_PMU_USERENR_EN);
 }
 
 static bool pmu_access_event_counter_el0_disabled(struct kvm_vcpu *vcpu)
 {
-	return check_pmu_access_disabled(vcpu, ARMV8_PMU_USERENR_ER | ARMV8_PMU_USERENR_EN);
+	return __check_pmuserenr(vcpu, ARMV8_PMU_USERENR_ER | ARMV8_PMU_USERENR_EN);
 }
 
 static bool access_pmcr(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
@@ -1350,9 +1351,6 @@ static bool access_pminten(struct kvm_vcpu *vcpu, struct sys_reg_params *p,
 			   const struct sys_reg_desc *r)
 {
 	u64 mask = kvm_pmu_accessible_counter_mask(vcpu);
-
-	if (check_pmu_access_disabled(vcpu, 0))
-		return false;
 
 	if (p->is_write) {
 		u64 val = p->regval & mask;
