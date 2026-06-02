@@ -121,6 +121,8 @@ static void inject_abt64(struct kvm_vcpu *vcpu, bool is_iabt, unsigned long addr
 		if (hpfar == INVALID_GPA)
 			return;
 
+		guard(srcu)(&vcpu->kvm->srcu);
+
 		ret = __kvm_find_s1_desc_level(vcpu, addr, hpfar, &level);
 		if (ret)
 			return;
