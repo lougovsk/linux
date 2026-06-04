@@ -7,6 +7,7 @@
 #include <hyp/adjust_pc.h>
 #include <hyp/switch.h>
 
+#include <asm/arch_gicv3.h>
 #include <asm/pgtable-types.h>
 #include <asm/kvm_asm.h>
 #include <asm/kvm_emulate.h>
@@ -128,6 +129,9 @@ static void flush_hyp_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu)
 
 	hyp_vcpu->vcpu.arch.ctxt	= host_vcpu->arch.ctxt;
 
+	/* A guest context must keep a NULL __hyp_running_vcpu. */
+	hyp_vcpu->vcpu.arch.ctxt.__hyp_running_vcpu = NULL;
+
 	hyp_vcpu->vcpu.arch.mdcr_el2	= host_vcpu->arch.mdcr_el2;
 	hyp_vcpu->vcpu.arch.hcr_el2 &= ~(HCR_TWI | HCR_TWE);
 	hyp_vcpu->vcpu.arch.hcr_el2 |= READ_ONCE(host_vcpu->arch.hcr_el2) &
@@ -138,6 +142,13 @@ static void flush_hyp_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu)
 	hyp_vcpu->vcpu.arch.vsesr_el2	= host_vcpu->arch.vsesr_el2;
 
 	hyp_vcpu->vcpu.arch.vgic_cpu.vgic_v3 = host_vcpu->arch.vgic_cpu.vgic_v3;
+
+	/* Bound the host-provided used_lrs by the implemented list registers. */
+	if (static_branch_unlikely(&kvm_vgic_global_state.gicv3_cpuif))
+		hyp_vcpu->vcpu.arch.vgic_cpu.vgic_v3.used_lrs =
+			min_t(unsigned int,
+			      hyp_vcpu->vcpu.arch.vgic_cpu.vgic_v3.used_lrs,
+			      (read_gicreg(ICH_VTR_EL2) & 0xf) + 1);
 
 	hyp_vcpu->vcpu.arch.pid = host_vcpu->arch.pid;
 }
