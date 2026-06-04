@@ -1878,8 +1878,6 @@ static int vgic_its_create(struct kvm_device *dev, u32 type)
 	INIT_LIST_HEAD(&its->collection_list);
 	xa_init(&its->translation_cache);
 
-	dev->kvm->arch.vgic.msis_require_devid = true;
-	dev->kvm->arch.vgic.has_its = true;
 	its->enabled = false;
 	its->dev = dev;
 
@@ -1887,15 +1885,21 @@ static int vgic_its_create(struct kvm_device *dev, u32 type)
 		((u64)GITS_BASER_TYPE_DEVICE << GITS_BASER_TYPE_SHIFT);
 	its->baser_coll_table = INITIAL_BASER_VALUE |
 		((u64)GITS_BASER_TYPE_COLLECTION << GITS_BASER_TYPE_SHIFT);
-	dev->kvm->arch.vgic.propbaser = INITIAL_PROPBASER_VALUE;
-
-	dev->private = its;
 
 	ret = vgic_its_set_abi(its, NR_ITS_ABIS - 1);
+	if (ret) {
+		mutex_unlock(&dev->kvm->arch.config_lock);
+		kfree(its);
+		return ret;
+	}
+
+	dev->kvm->arch.vgic.msis_require_devid = true;
+	dev->kvm->arch.vgic.has_its = true;
+	dev->kvm->arch.vgic.propbaser = INITIAL_PROPBASER_VALUE;
+	dev->private = its;
 
 	mutex_unlock(&dev->kvm->arch.config_lock);
-
-	return ret;
+	return 0;
 }
 
 static void vgic_its_destroy(struct kvm_device *kvm_dev)
