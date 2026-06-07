@@ -969,6 +969,10 @@ static void invalidate_vncr_va(struct kvm *kvm,
 		struct vncr_tlb *vt = vcpu->arch.vncr_tlb;
 		u64 va_start, va_end, va_size;
 
+		/* Skip vCPUs whose pseudo-TLB hasn't been allocated yet */
+		if (!vt)
+			continue;
+
 		if (!vt->valid)
 			continue;
 
