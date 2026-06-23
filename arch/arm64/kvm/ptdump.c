@@ -19,7 +19,12 @@
 #define KVM_PGTABLE_MAX_LEVELS	(KVM_PGTABLE_LAST_LEVEL + 1)
 #define S2FNAMESZ		sizeof("0x0123456789abcdef-0x0123456789abcdef-s2-disabled")
 
+/*
+ * Nested mmus could be freed when .release() is called, so also keep the kvm
+ * pointer for kvm_put_kvm().
+ */
 struct kvm_ptdump_guest_state {
+	struct kvm		*kvm;
 	struct kvm_s2_mmu	*mmu;
 	struct ptdump_pg_state	parser_state;
 	struct addr_marker	ipa_marker[MARKERS_LEN];
@@ -133,6 +138,7 @@ static struct kvm_ptdump_guest_state *kvm_ptdump_parser_create(struct kvm_s2_mmu
 	st->ipa_marker[1].start_address = BIT(pgtable->ia_bits);
 
 	st->mmu				= mmu;
+	st->kvm				= kvm_s2_mmu_to_kvm(mmu);
 	return st;
 }
 
@@ -197,11 +203,10 @@ err_with_kvm_ref:
 
 static int kvm_ptdump_guest_close(struct inode *m, struct file *file)
 {
-	struct kvm *kvm = kvm_s2_mmu_to_kvm(m->i_private);
 	void *st = ((struct seq_file *)file->private_data)->private;
 
+	kvm_put_kvm(((struct kvm_ptdump_guest_state *)st)->kvm);
 	kfree(st);
-	kvm_put_kvm(kvm);
 
 	return single_release(m, file);
 }
