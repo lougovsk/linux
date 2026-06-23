@@ -155,9 +155,16 @@ static int kvm_ptdump_guest_show(struct seq_file *m, void *unused)
 		.seq		= m,
 	};
 
-	write_lock(&kvm->mmu_lock);
+	guard(write_lock)(&kvm->mmu_lock);
+	if (kvm_is_nested_s2_mmu(kvm, mmu)) {
+		if (!kvm_s2_mmu_valid(mmu)) {
+			seq_puts(m, "invalid nested mmu\n");
+			return 0;
+		}
+		seq_printf(m, "0x%016llx 0x%016llx %d\n", mmu->tlb_vttbr,
+			   mmu->tlb_vtcr, mmu->nested_stage2_enabled ? 1 : 0);
+	}
 	ret = kvm_pgtable_walk(mmu->pgt, 0, BIT(mmu->pgt->ia_bits), &walker);
-	write_unlock(&kvm->mmu_lock);
 
 	return ret;
 }
