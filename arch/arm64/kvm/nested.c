@@ -109,6 +109,11 @@ int kvm_vcpu_init_nested(struct kvm_vcpu *vcpu)
 
 		write_unlock(&kvm->mmu_lock);
 
+		for (int i = 0; i < kvm->arch.nested_mmus_size; i++) {
+			kvm_nested_s2_ptdump_remove_debugfs(&tmp[i]);
+			kvm_nested_s2_ptdump_create_debugfs(&kvm->arch.nested_mmus[i]);
+		}
+
 		kvfree(tmp);
 	}
 
@@ -124,6 +129,9 @@ int kvm_vcpu_init_nested(struct kvm_vcpu *vcpu)
 
 		return ret;
 	}
+
+	for (int i = kvm->arch.nested_mmus_size; i < num_mmus; i++)
+		kvm_nested_s2_ptdump_create_debugfs(&kvm->arch.nested_mmus[i]);
 
 	kvm->arch.nested_mmus_size = num_mmus;
 
@@ -816,10 +824,8 @@ static struct kvm_s2_mmu *get_s2_mmu_nested(struct kvm_vcpu *vcpu)
 	kvm->arch.nested_mmus_next = (i + 1) % kvm->arch.nested_mmus_size;
 
 	/* Make sure we don't forget to do the laundry */
-	if (kvm_s2_mmu_valid(s2_mmu)) {
-		kvm_nested_s2_ptdump_remove_debugfs(s2_mmu);
+	if (kvm_s2_mmu_valid(s2_mmu))
 		s2_mmu->pending_unmap = true;
-	}
 
 	/*
 	 * The virtual VMID (modulo CnP) will be used as a key when matching
@@ -832,8 +838,6 @@ static struct kvm_s2_mmu *get_s2_mmu_nested(struct kvm_vcpu *vcpu)
 	s2_mmu->tlb_vttbr = vcpu_read_sys_reg(vcpu, VTTBR_EL2) & ~VTTBR_CNP_BIT;
 	s2_mmu->tlb_vtcr = vcpu_read_sys_reg(vcpu, VTCR_EL2);
 	s2_mmu->nested_stage2_enabled = vcpu_read_sys_reg(vcpu, HCR_EL2) & HCR_VM;
-
-	kvm_nested_s2_ptdump_create_debugfs(s2_mmu);
 
 out:
 	atomic_inc(&s2_mmu->refcnt);
@@ -1273,6 +1277,8 @@ void kvm_arch_flush_shadow_all(struct kvm *kvm)
 
 	for (i = 0; i < kvm->arch.nested_mmus_size; i++) {
 		struct kvm_s2_mmu *mmu = &kvm->arch.nested_mmus[i];
+
+		kvm_nested_s2_ptdump_remove_debugfs(mmu);
 
 		if (!WARN_ON(atomic_read(&mmu->refcnt)))
 			kvm_free_stage2_pgd(mmu);

@@ -17,7 +17,7 @@
 
 #define MARKERS_LEN		2
 #define KVM_PGTABLE_MAX_LEVELS	(KVM_PGTABLE_LAST_LEVEL + 1)
-#define S2FNAMESZ		sizeof("0x0123456789abcdef-0x0123456789abcdef-s2-disabled")
+#define S2FNAMESZ		sizeof("nested_mmu_9999")
 
 /*
  * Nested mmus could be freed when .release() is called, so also keep the kvm
@@ -287,14 +287,11 @@ static const struct file_operations kvm_pgtable_levels_fops = {
 
 void kvm_nested_s2_ptdump_create_debugfs(struct kvm_s2_mmu *mmu)
 {
+	int idx = mmu - mmu->arch->nested_mmus;
 	struct dentry *dent;
 	char file_name[S2FNAMESZ];
 
-	snprintf(file_name, sizeof(file_name), "0x%016llx-0x%016llx-s2-%sabled",
-		 mmu->tlb_vttbr,
-		 mmu->tlb_vtcr,
-		 mmu->nested_stage2_enabled ? "en" : "dis");
-
+	snprintf(file_name, sizeof(file_name), "nested_mmu_%d", idx);
 	dent = debugfs_create_file(file_name, 0400,
 				   mmu->arch->debugfs_nv_dentry, mmu,
 				   &kvm_ptdump_guest_fops);
