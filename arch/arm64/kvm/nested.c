@@ -917,6 +917,7 @@ void kvm_vcpu_put_hw_mmu(struct kvm_vcpu *vcpu)
  */
 int kvm_s2_handle_perm_fault(struct kvm_vcpu *vcpu, struct kvm_s2_trans *trans)
 {
+	bool write_fault = kvm_is_write_fault(vcpu);
 	bool forward_fault = false;
 
 	trans->esr = 0;
@@ -924,14 +925,27 @@ int kvm_s2_handle_perm_fault(struct kvm_vcpu *vcpu, struct kvm_s2_trans *trans)
 	if (!kvm_vcpu_trap_is_permission_fault(vcpu))
 		return 0;
 
-	if (kvm_vcpu_trap_is_iabt(vcpu)) {
+	/*
+	 * S1PTW permission faults do not provide sufficient syndrome information
+	 * to determine if the fault was for read or write permissions. Perform a
+	 * read permission check and an optional write permission check, relying
+	 * on the fact that:
+	 *
+	 *  - The table walker at minimum requires read permission
+	 *
+	 *  - The L1 hypervisor also needs to deal with the architecture and
+	 *    cannot directly infer the failing permission from the fault context
+	 */
+	if (kvm_vcpu_abt_iss1tw(vcpu)) {
+		forward_fault = !trans->readable;
+		if (write_fault)
+			forward_fault |= !trans->writable;
+	} else if (kvm_vcpu_trap_is_iabt(vcpu)) {
 		if (vcpu_mode_priv(vcpu))
 			forward_fault = !kvm_s2_trans_exec_el1(vcpu->kvm, trans);
 		else
 			forward_fault = !kvm_s2_trans_exec_el0(vcpu->kvm, trans);
 	} else {
-		bool write_fault = kvm_is_write_fault(vcpu);
-
 		forward_fault = ((write_fault && !trans->writable) ||
 				 (!write_fault && !trans->readable));
 	}
