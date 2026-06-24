@@ -227,6 +227,36 @@ static unsigned int tcr_tg_pgshift(struct kvm *kvm, u64 tcr, bool upper_range)
 	return shift;
 }
 
+static bool __effective_tcr_ha(struct kvm_vcpu *vcpu, enum trans_regime regime)
+{
+	if (!kvm_has_feat(vcpu->kvm, ID_AA64MMFR1_EL1, HAFDBS, AF))
+		return false;
+
+	switch (regime) {
+	case TR_EL10:
+		return vcpu_read_sys_reg(vcpu, TCR_EL1) & TCR_HA;
+	case TR_EL20:
+		return vcpu_read_sys_reg(vcpu, TCR_EL2) & TCR_HA;
+	case TR_EL2:
+		return vcpu_read_sys_reg(vcpu, TCR_EL2) & TCR_EL2_HA;
+	default:
+		BUG();
+	}
+}
+
+static enum trans_regime vcpu_trans_regime(struct kvm_vcpu *vcpu)
+{
+	if (!is_hyp_ctxt(vcpu))
+		return TR_EL10;
+
+	return vcpu_el2_e2h_is_set(vcpu) ? TR_EL20 : TR_EL2;
+}
+
+bool effective_tcr_ha(struct kvm_vcpu *vcpu)
+{
+	return __effective_tcr_ha(vcpu, vcpu_trans_regime(vcpu));
+}
+
 static int setup_s1_walk(struct kvm_vcpu *vcpu, struct s1_walk_info *wi,
 			 struct s1_walk_result *wr, u64 va)
 {
@@ -415,12 +445,7 @@ static int setup_s1_walk(struct kvm_vcpu *vcpu, struct s1_walk_info *wi,
 		goto addrsz;
 
 	wi->baddr &= GENMASK_ULL(wi->max_oa_bits - 1, x);
-
-	wi->ha  = kvm_has_feat(vcpu->kvm, ID_AA64MMFR1_EL1, HAFDBS, AF);
-	wi->ha &= (wi->regime == TR_EL2 ?
-		  FIELD_GET(TCR_EL2_HA, tcr) :
-		  FIELD_GET(TCR_HA, tcr));
-
+	wi->ha = __effective_tcr_ha(vcpu, wi->regime);
 	return 0;
 
 addrsz:
@@ -1732,10 +1757,7 @@ int __kvm_find_s1_desc_level(struct kvm_vcpu *vcpu, u64 va, u64 ipa, int *level)
 	struct s1_walk_result wr = {};
 	int ret;
 
-	if (is_hyp_ctxt(vcpu))
-		wi.regime = vcpu_el2_e2h_is_set(vcpu) ? TR_EL20 : TR_EL2;
-	else
-		wi.regime = TR_EL10;
+	wi.regime = vcpu_trans_regime(vcpu);
 
 	ret = setup_s1_walk(vcpu, &wi, &wr, va);
 	if (ret)

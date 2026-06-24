@@ -479,21 +479,13 @@ static __always_inline int kvm_vcpu_sys_get_rt(struct kvm_vcpu *vcpu)
 
 static inline bool kvm_is_write_fault(struct kvm_vcpu *vcpu)
 {
-	if (kvm_vcpu_abt_iss1tw(vcpu)) {
-		/*
-		 * Only a permission fault on a S1PTW should be
-		 * considered as a write. Otherwise, page tables baked
-		 * in a read-only memslot will result in an exception
-		 * being delivered in the guest.
-		 *
-		 * The drawback is that we end-up faulting twice if the
-		 * guest is using any of HW AF/DB: a translation fault
-		 * to map the page containing the PT (read only at
-		 * first), then a permission fault to allow the flags
-		 * to be set.
-		 */
-		return kvm_vcpu_trap_is_permission_fault(vcpu);
-	}
+	/*
+	 * The architecture sucks; assume that the S1PTW fetched for write if
+	 * HA is enabled at stage-1. Note that hardware updates to dirty state
+	 * and table AF are predicated on HA=1 (DDI0487 M.a D24.2.194; R_SNVTX).
+	 */
+	if (kvm_vcpu_abt_iss1tw(vcpu))
+		return effective_tcr_ha(vcpu);
 
 	if (kvm_vcpu_trap_is_iabt(vcpu))
 		return false;
