@@ -508,11 +508,8 @@ static struct vgic_its *__vgic_doorbell_to_its(struct kvm *kvm, gpa_t db)
 	struct kvm_io_device *kvm_io_dev;
 	struct vgic_io_device *iodev;
 
-	kvm_io_dev = kvm_io_bus_get_dev(kvm, KVM_MMIO_BUS, db);
+	kvm_io_dev = kvm_io_bus_get_dev(kvm, KVM_MMIO_BUS, &kvm_io_gic_ops, db);
 	if (!kvm_io_dev)
-		return ERR_PTR(-EINVAL);
-
-	if (kvm_io_dev->ops != &kvm_io_gic_ops)
 		return ERR_PTR(-EINVAL);
 
 	iodev = container_of(kvm_io_dev, struct vgic_io_device, dev);

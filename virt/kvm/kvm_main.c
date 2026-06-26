@@ -6066,6 +6066,7 @@ int kvm_io_bus_unregister_dev(struct kvm *kvm, enum kvm_bus bus_idx,
 }
 
 struct kvm_io_device *kvm_io_bus_get_dev(struct kvm *kvm, enum kvm_bus bus_idx,
+					 const struct kvm_io_device_ops *ops,
 					 gpa_t addr)
 {
 	struct kvm_io_bus *bus;
@@ -6082,7 +6083,9 @@ struct kvm_io_device *kvm_io_bus_get_dev(struct kvm *kvm, enum kvm_bus bus_idx,
 	if (dev_idx < 0)
 		goto out_unlock;
 
-	iodev = bus->range[dev_idx].dev;
+	if (bus->range[dev_idx].dev &&
+	    bus->range[dev_idx].dev->ops == ops)
+		iodev = bus->range[dev_idx].dev;
 
 out_unlock:
 	srcu_read_unlock(&kvm->srcu, srcu_idx);
