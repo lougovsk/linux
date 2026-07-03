@@ -6,6 +6,7 @@
 
 #ifdef CONFIG_ARM64_PSEUDO_NMI
 #include <asm/arch_gicv3.h>
+#include <asm/ptrace.h>
 
 struct arm_cpuidle_irq_context {
 	unsigned long pmr;
@@ -17,7 +18,7 @@ struct arm_cpuidle_irq_context {
 		struct arm_cpuidle_irq_context *c = __c;		\
 		if (system_uses_irq_prio_masking()) {			\
 			c->daif_bits = read_sysreg(daif);		\
-			write_sysreg(c->daif_bits | PSR_I_BIT | PSR_F_BIT, \
+			write_sysreg(c->daif_bits | DAIF_PROCCTX_NOIRQ, \
 				     daif);				\
 			c->pmr = gic_read_pmr();			\
 			gic_write_pmr(GIC_PRIO_IRQON | GIC_PRIO_PSR_I_SET); \

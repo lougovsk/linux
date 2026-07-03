@@ -8,6 +8,7 @@
 #include <hyp/switch.h>
 
 #include <asm/pgtable-types.h>
+#include <asm/ptrace.h>
 #include <asm/kvm_asm.h>
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_host.h>
@@ -859,8 +860,7 @@ void inject_host_exception(u64 esr)
 	}
 
 	spsr_el2 &= spsr_mask;
-	spsr_el2 |= PSR_D_BIT | PSR_A_BIT | PSR_I_BIT | PSR_F_BIT |
-		    PSR_MODE_EL1h;
+	spsr_el2 |= DAIF_MASK | PSR_MODE_EL1h;
 
 	sctlr = read_sysreg_el1(SYS_SCTLR);
 	if (!(sctlr & SCTLR_EL1_SPAN))

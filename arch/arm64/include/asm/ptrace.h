@@ -12,14 +12,17 @@
 
 #include <uapi/asm/ptrace.h>
 
+#define DAIF_PROCCTX		0
+#define DAIF_PROCCTX_NOIRQ	(PSR_I_BIT | PSR_F_BIT)
+#define DAIF_ERRCTX		(PSR_A_BIT | PSR_I_BIT | PSR_F_BIT)
+#define DAIF_MASK		(PSR_D_BIT | PSR_A_BIT | PSR_I_BIT | PSR_F_BIT)
+
 /* Current Exception Level values, as contained in CurrentEL */
 #define CurrentEL_EL1		(1 << 2)
 #define CurrentEL_EL2		(2 << 2)
 
-#define INIT_PSTATE_EL1 \
-	(PSR_D_BIT | PSR_A_BIT | PSR_I_BIT | PSR_F_BIT | PSR_MODE_EL1h)
-#define INIT_PSTATE_EL2 \
-	(PSR_D_BIT | PSR_A_BIT | PSR_I_BIT | PSR_F_BIT | PSR_MODE_EL2h)
+#define INIT_PSTATE_EL1	(DAIF_MASK | PSR_MODE_EL1h)
+#define INIT_PSTATE_EL2	(DAIF_MASK | PSR_MODE_EL2h)
 
 #include <linux/irqchip/arm-gic-v3-prio.h>
 

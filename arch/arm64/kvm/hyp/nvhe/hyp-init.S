@@ -15,6 +15,7 @@
 #include <asm/kvm_asm.h>
 #include <asm/kvm_mmu.h>
 #include <asm/pgtable-hwdef.h>
+#include <asm/ptrace.h>
 #include <asm/sysreg.h>
 #include <asm/virt.h>
 
@@ -224,7 +225,7 @@ SYM_CODE_START(__kvm_handle_stub_hvc)
 
 	/* This is where we're about to jump, staying at EL2 */
 	msr	elr_el2, x1
-	mov	x0, #(PSR_F_BIT | PSR_I_BIT | PSR_A_BIT | PSR_D_BIT | PSR_MODE_EL2h)
+	mov	x0, #(DAIF_MASK | PSR_MODE_EL2h)
 	msr	spsr_el2, x0
 
 	/* Shuffle the arguments, and don't come back */

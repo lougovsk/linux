@@ -9,6 +9,7 @@
 
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_nested.h>
+#include <asm/ptrace.h>
 
 #include "hyp/include/hyp/adjust_pc.h"
 
@@ -2754,9 +2755,8 @@ static u64 kvm_check_illegal_exception_return(struct kvm_vcpu *vcpu, u64 spsr)
 		 */
 		spsr = *vcpu_cpsr(vcpu);
 
-		spsr &= (PSR_D_BIT | PSR_A_BIT | PSR_I_BIT | PSR_F_BIT |
-			 PSR_N_BIT | PSR_Z_BIT | PSR_C_BIT | PSR_V_BIT |
-			 PSR_MODE_MASK | PSR_MODE32_BIT);
+		spsr &= (DAIF_MASK | PSR_N_BIT | PSR_Z_BIT | PSR_C_BIT |
+			 PSR_V_BIT | PSR_MODE_MASK | PSR_MODE32_BIT);
 		spsr |= PSR_IL_BIT;
 	}
 

@@ -11,6 +11,7 @@
 #include <asm/kvm_asm.h>
 #include <asm/kvm_mmu.h>
 #include <asm/kvm_ptrauth.h>
+#include <asm/ptrace.h>
 
 	.text
 
@@ -111,8 +112,7 @@ SYM_FUNC_END(__host_enter)
  */
 SYM_FUNC_START(__hyp_do_panic)
 	/* Prepare and exit to the host's panic function. */
-	mov	lr, #(PSR_F_BIT | PSR_I_BIT | PSR_A_BIT | PSR_D_BIT |\
-		      PSR_MODE_EL1h)
+	mov	lr, #(DAIF_MASK | PSR_MODE_EL1h)
 	msr	spsr_el2, lr
 	adr_l	lr, nvhe_hyp_panic_handler
 	hyp_kimg_va lr, x6
