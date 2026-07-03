@@ -138,4 +138,62 @@ static inline void local_exception_inherit(struct pt_regs *regs)
 
 	write_sysreg(regs->pstate & DAIF_MASK, daif);
 }
+
+/*
+ * Allow Debug exceptions and SError, mask IRQ/FIQ
+ */
+static __always_inline struct exception_mask irq_entry_unmask_debug_serror(struct pt_regs *regs)
+{
+	struct exception_mask orig;
+
+	local_exception_save_mask(&orig);
+	write_sysreg(DAIF_PROCCTX_NOIRQ, daif);
+
+	return orig;
+}
+
+static __always_inline struct exception_mask error_entry_unmask_debug(struct pt_regs *regs)
+{
+	struct exception_mask orig;
+
+	local_exception_save_mask(&orig);
+	local_exception_restore(arm64_make_errctx_mask());
+
+	return orig;
+}
+
+static __always_inline struct exception_mask el1_sync_entry_unmask_inherit(struct pt_regs *regs)
+{
+	struct exception_mask orig;
+
+	local_exception_save_mask(&orig);
+	local_exception_inherit(regs);
+
+	return orig;
+}
+
+/*
+ * Unmask all exceptions to establish a standard process context.
+ * Suitable for EL0 sync entry and secondary CPU boot streaming.
+ */
+static __always_inline void el0_sync_entry_unmask_all(struct pt_regs *regs)
+{
+	local_exception_restore(arm64_make_procctx_mask());
+}
+
+/*
+ * Retained for symmetric naming, used before returning to EL0
+ */
+static __always_inline void el0_sync_exit_unmask_all(struct pt_regs *regs)
+{
+	local_exception_restore(arm64_make_procctx_mask());
+}
+
+/*
+ * Mask all exceptions, ready to return to interrupted context
+ */
+static __always_inline void exception_exit_restore_mask(struct exception_mask mask)
+{
+	write_sysreg(mask.daif, daif);
+}
 #endif /* __ASM_EXCEPTION_MASKS_H */
