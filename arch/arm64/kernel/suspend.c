@@ -9,7 +9,7 @@
 #include <asm/cacheflush.h>
 #include <asm/cpufeature.h>
 #include <asm/cpuidle.h>
-#include <asm/daifflags.h>
+#include <asm/exception_masks.h>
 #include <asm/debug-monitors.h>
 #include <asm/exec.h>
 #include <asm/fpsimd.h>
@@ -96,10 +96,9 @@ void notrace __cpu_suspend_exit(void)
  */
 int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
 {
-	int ret = 0;
-	unsigned long flags;
+	struct exception_mask mask, cpuidle_mask;
 	struct sleep_stack_data state;
-	struct arm_cpuidle_irq_context context;
+	int ret = 0;
 
 	/*
 	 * Some portions of CPU state (e.g. PSTATE.{PAN,DIT}) are initialized
@@ -122,7 +121,7 @@ int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
 	 * hardirqs should be firmly off by now. This really ought to use
 	 * something like raw_local_daif_save().
 	 */
-	flags = local_daif_save();
+	mask = local_exception_save_and_mask();
 
 	/*
 	 * Function graph tracer state gets inconsistent when the kernel
@@ -135,7 +134,7 @@ int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
 	 * Switch to using DAIF.IF instead of PMR in order to reliably
 	 * resume if we're using pseudo-NMIs.
 	 */
-	arm_cpuidle_save_irq_context(&context);
+	arm_cpuidle_save_irq_context(&cpuidle_mask);
 
 	ct_cpuidle_enter();
 
@@ -159,7 +158,7 @@ int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
 		__cpu_suspend_exit();
 	}
 
-	arm_cpuidle_restore_irq_context(&context);
+	arm_cpuidle_restore_irq_context(&cpuidle_mask);
 
 	unpause_graph_tracing();
 
@@ -168,7 +167,7 @@ int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
 	 * restored, so from this point onwards, debugging is fully
 	 * reenabled if it was enabled when core started shutdown.
 	 */
-	local_daif_restore(flags);
+	local_exception_restore(mask);
 
 	return ret;
 }

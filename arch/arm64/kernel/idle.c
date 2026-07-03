@@ -6,6 +6,7 @@
 #include <linux/cpu.h>
 #include <linux/irqflags.h>
 
+#include <asm/exception_masks.h>
 #include <asm/barrier.h>
 #include <asm/cpuidle.h>
 #include <asm/cpufeature.h>
@@ -22,14 +23,14 @@
  */
 void __cpuidle cpu_do_idle(void)
 {
-	struct arm_cpuidle_irq_context context;
+	struct exception_mask mask;
 
-	arm_cpuidle_save_irq_context(&context);
+	arm_cpuidle_save_irq_context(&mask);
 
 	dsb(sy);
 	wfi();
 
-	arm_cpuidle_restore_irq_context(&context);
+	arm_cpuidle_restore_irq_context(&mask);
 }
 
 /*

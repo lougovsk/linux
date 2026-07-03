@@ -18,7 +18,7 @@
 #include <linux/thread_info.h>
 
 #include <asm/cpufeature.h>
-#include <asm/daifflags.h>
+#include <asm/exception_masks.h>
 #include <asm/esr.h>
 #include <asm/exception.h>
 #include <asm/fpsimd.h>
@@ -57,7 +57,7 @@ static void noinstr arm64_exit_to_kernel_mode(struct pt_regs *regs,
 {
 	local_irq_disable();
 	irqentry_exit_to_kernel_mode_preempt(regs, state);
-	local_daif_mask();
+	local_exception_mask();
 	mte_check_tfsr_exit();
 	irqentry_exit_to_kernel_mode_after_preempt(regs, state);
 }
@@ -86,7 +86,7 @@ static __always_inline void arm64_syscall_exit_to_user_mode(struct pt_regs *regs
 {
 	local_irq_disable();
 	syscall_exit_to_user_mode_prepare(regs);
-	local_daif_mask();
+	local_exception_mask();
 	sme_exit_to_user_mode();
 	mte_check_tfsr_exit();
 	exit_to_user_mode();
@@ -101,7 +101,7 @@ static __always_inline void arm64_exit_to_user_mode(struct pt_regs *regs)
 {
 	local_irq_disable();
 	irqentry_exit_to_user_mode_prepare(regs);
-	local_daif_mask();
+	local_exception_mask();
 	sme_exit_to_user_mode();
 	mte_check_tfsr_exit();
 	exit_to_user_mode();
@@ -318,7 +318,7 @@ static void noinstr el1_abort(struct pt_regs *regs, unsigned long esr)
 	irqentry_state_t state;
 
 	state = arm64_enter_from_kernel_mode(regs);
-	local_daif_inherit(regs);
+	local_exception_inherit(regs);
 	do_mem_abort(far, esr, regs);
 	arm64_exit_to_kernel_mode(regs, state);
 }
@@ -329,7 +329,7 @@ static void noinstr el1_pc(struct pt_regs *regs, unsigned long esr)
 	irqentry_state_t state;
 
 	state = arm64_enter_from_kernel_mode(regs);
-	local_daif_inherit(regs);
+	local_exception_inherit(regs);
 	do_sp_pc_abort(far, esr, regs);
 	arm64_exit_to_kernel_mode(regs, state);
 }
@@ -339,7 +339,7 @@ static void noinstr el1_undef(struct pt_regs *regs, unsigned long esr)
 	irqentry_state_t state;
 
 	state = arm64_enter_from_kernel_mode(regs);
-	local_daif_inherit(regs);
+	local_exception_inherit(regs);
 	do_el1_undef(regs, esr);
 	arm64_exit_to_kernel_mode(regs, state);
 }
@@ -349,7 +349,7 @@ static void noinstr el1_bti(struct pt_regs *regs, unsigned long esr)
 	irqentry_state_t state;
 
 	state = arm64_enter_from_kernel_mode(regs);
-	local_daif_inherit(regs);
+	local_exception_inherit(regs);
 	do_el1_bti(regs, esr);
 	arm64_exit_to_kernel_mode(regs, state);
 }
@@ -359,7 +359,7 @@ static void noinstr el1_gcs(struct pt_regs *regs, unsigned long esr)
 	irqentry_state_t state;
 
 	state = arm64_enter_from_kernel_mode(regs);
-	local_daif_inherit(regs);
+	local_exception_inherit(regs);
 	do_el1_gcs(regs, esr);
 	arm64_exit_to_kernel_mode(regs, state);
 }
@@ -369,7 +369,7 @@ static void noinstr el1_mops(struct pt_regs *regs, unsigned long esr)
 	irqentry_state_t state;
 
 	state = arm64_enter_from_kernel_mode(regs);
-	local_daif_inherit(regs);
+	local_exception_inherit(regs);
 	do_el1_mops(regs, esr);
 	arm64_exit_to_kernel_mode(regs, state);
 }
@@ -434,7 +434,7 @@ static void noinstr el1_fpac(struct pt_regs *regs, unsigned long esr)
 	irqentry_state_t state;
 
 	state = arm64_enter_from_kernel_mode(regs);
-	local_daif_inherit(regs);
+	local_exception_inherit(regs);
 	do_el1_fpac(regs, esr);
 	arm64_exit_to_kernel_mode(regs, state);
 }
@@ -537,7 +537,7 @@ asmlinkage void noinstr el1h_64_error_handler(struct pt_regs *regs)
 	unsigned long esr = read_sysreg(esr_el1);
 	irqentry_state_t state;
 
-	local_daif_restore(DAIF_ERRCTX);
+	local_exception_restore(arm64_make_errctx_mask());
 	state = irqentry_nmi_enter(regs);
 	do_serror(regs, esr);
 	irqentry_nmi_exit(regs, state);
@@ -548,7 +548,7 @@ static void noinstr el0_da(struct pt_regs *regs, unsigned long esr)
 	unsigned long far = read_sysreg(far_el1);
 
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_mem_abort(far, esr, regs);
 	arm64_exit_to_user_mode(regs);
 }
@@ -566,7 +566,7 @@ static void noinstr el0_ia(struct pt_regs *regs, unsigned long esr)
 		arm64_apply_bp_hardening();
 
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_mem_abort(far, esr, regs);
 	arm64_exit_to_user_mode(regs);
 }
@@ -574,7 +574,7 @@ static void noinstr el0_ia(struct pt_regs *regs, unsigned long esr)
 static void noinstr el0_fpsimd_acc(struct pt_regs *regs, unsigned long esr)
 {
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_fpsimd_acc(esr, regs);
 	arm64_exit_to_user_mode(regs);
 }
@@ -582,7 +582,7 @@ static void noinstr el0_fpsimd_acc(struct pt_regs *regs, unsigned long esr)
 static void noinstr el0_sve_acc(struct pt_regs *regs, unsigned long esr)
 {
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_sve_acc(esr, regs);
 	arm64_exit_to_user_mode(regs);
 }
@@ -590,7 +590,7 @@ static void noinstr el0_sve_acc(struct pt_regs *regs, unsigned long esr)
 static void noinstr el0_sme_acc(struct pt_regs *regs, unsigned long esr)
 {
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_sme_acc(esr, regs);
 	arm64_exit_to_user_mode(regs);
 }
@@ -598,7 +598,7 @@ static void noinstr el0_sme_acc(struct pt_regs *regs, unsigned long esr)
 static void noinstr el0_fpsimd_exc(struct pt_regs *regs, unsigned long esr)
 {
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_fpsimd_exc(esr, regs);
 	arm64_exit_to_user_mode(regs);
 }
@@ -606,7 +606,7 @@ static void noinstr el0_fpsimd_exc(struct pt_regs *regs, unsigned long esr)
 static void noinstr el0_sys(struct pt_regs *regs, unsigned long esr)
 {
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_el0_sys(esr, regs);
 	arm64_exit_to_user_mode(regs);
 }
@@ -619,7 +619,7 @@ static void noinstr el0_pc(struct pt_regs *regs, unsigned long esr)
 		arm64_apply_bp_hardening();
 
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_sp_pc_abort(far, esr, regs);
 	arm64_exit_to_user_mode(regs);
 }
@@ -627,7 +627,7 @@ static void noinstr el0_pc(struct pt_regs *regs, unsigned long esr)
 static void noinstr el0_sp(struct pt_regs *regs, unsigned long esr)
 {
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_sp_pc_abort(regs->sp, esr, regs);
 	arm64_exit_to_user_mode(regs);
 }
@@ -635,7 +635,7 @@ static void noinstr el0_sp(struct pt_regs *regs, unsigned long esr)
 static void noinstr el0_undef(struct pt_regs *regs, unsigned long esr)
 {
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_el0_undef(regs, esr);
 	arm64_exit_to_user_mode(regs);
 }
@@ -643,7 +643,7 @@ static void noinstr el0_undef(struct pt_regs *regs, unsigned long esr)
 static void noinstr el0_bti(struct pt_regs *regs)
 {
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_el0_bti(regs);
 	arm64_exit_to_user_mode(regs);
 }
@@ -651,7 +651,7 @@ static void noinstr el0_bti(struct pt_regs *regs)
 static void noinstr el0_mops(struct pt_regs *regs, unsigned long esr)
 {
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_el0_mops(regs, esr);
 	arm64_exit_to_user_mode(regs);
 }
@@ -659,7 +659,7 @@ static void noinstr el0_mops(struct pt_regs *regs, unsigned long esr)
 static void noinstr el0_gcs(struct pt_regs *regs, unsigned long esr)
 {
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_el0_gcs(regs, esr);
 	arm64_exit_to_user_mode(regs);
 }
@@ -667,7 +667,7 @@ static void noinstr el0_gcs(struct pt_regs *regs, unsigned long esr)
 static void noinstr el0_inv(struct pt_regs *regs, unsigned long esr)
 {
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	bad_el0_sync(regs, 0, esr);
 	arm64_exit_to_user_mode(regs);
 }
@@ -681,7 +681,7 @@ static void noinstr el0_breakpt(struct pt_regs *regs, unsigned long esr)
 	debug_exception_enter(regs);
 	do_breakpoint(esr, regs);
 	debug_exception_exit(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	arm64_exit_to_user_mode(regs);
 }
 
@@ -700,7 +700,7 @@ static void noinstr el0_softstp(struct pt_regs *regs, unsigned long esr)
 	 * the single-step is complete.
 	 */
 	step_done = try_step_suspended_breakpoints(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	if (!step_done)
 		do_el0_softstep(esr, regs);
 	arm64_exit_to_user_mode(regs);
@@ -715,14 +715,14 @@ static void noinstr el0_watchpt(struct pt_regs *regs, unsigned long esr)
 	debug_exception_enter(regs);
 	do_watchpoint(far, esr, regs);
 	debug_exception_exit(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	arm64_exit_to_user_mode(regs);
 }
 
 static void noinstr el0_brk64(struct pt_regs *regs, unsigned long esr)
 {
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_el0_brk64(esr, regs);
 	arm64_exit_to_user_mode(regs);
 }
@@ -732,7 +732,7 @@ static void noinstr el0_svc(struct pt_regs *regs)
 	arm64_syscall_enter_from_user_mode(regs);
 	cortex_a76_erratum_1463225_svc_handler();
 	fpsimd_syscall_enter();
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_el0_svc(regs);
 	arm64_syscall_exit_to_user_mode(regs);
 	fpsimd_syscall_exit();
@@ -741,7 +741,7 @@ static void noinstr el0_svc(struct pt_regs *regs)
 static void noinstr el0_fpac(struct pt_regs *regs, unsigned long esr)
 {
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_el0_fpac(regs, esr);
 	arm64_exit_to_user_mode(regs);
 }
@@ -857,11 +857,11 @@ static void noinstr __el0_error_handler_common(struct pt_regs *regs)
 	irqentry_state_t state;
 
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_ERRCTX);
+	local_exception_restore(arm64_make_errctx_mask());
 	state = irqentry_nmi_enter(regs);
 	do_serror(regs, esr);
 	irqentry_nmi_exit(regs, state);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	arm64_exit_to_user_mode(regs);
 }
 
@@ -874,7 +874,7 @@ asmlinkage void noinstr el0t_64_error_handler(struct pt_regs *regs)
 static void noinstr el0_cp15(struct pt_regs *regs, unsigned long esr)
 {
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_el0_cp15(esr, regs);
 	arm64_exit_to_user_mode(regs);
 }
@@ -883,7 +883,7 @@ static void noinstr el0_svc_compat(struct pt_regs *regs)
 {
 	arm64_syscall_enter_from_user_mode(regs);
 	cortex_a76_erratum_1463225_svc_handler();
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_el0_svc_compat(regs);
 	arm64_syscall_exit_to_user_mode(regs);
 }
@@ -891,7 +891,7 @@ static void noinstr el0_svc_compat(struct pt_regs *regs)
 static void noinstr el0_bkpt32(struct pt_regs *regs, unsigned long esr)
 {
 	arm64_enter_from_user_mode(regs);
-	local_daif_restore(DAIF_PROCCTX);
+	local_exception_restore(arm64_make_procctx_mask());
 	do_bkpt32(esr, regs);
 	arm64_exit_to_user_mode(regs);
 }

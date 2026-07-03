@@ -24,6 +24,7 @@
 
 #include <asm/cpuidle.h>
 #include <asm/cputype.h>
+#include <asm/exception_masks.h>
 #include <asm/hypervisor.h>
 #include <asm/system_misc.h>
 #include <asm/smp_plat.h>
@@ -503,12 +504,12 @@ int psci_cpu_suspend_enter(u32 state)
 	int ret;
 
 	if (!psci_power_state_loses_context(state)) {
-		struct arm_cpuidle_irq_context context;
+		struct exception_mask mask;
 
 		ct_cpuidle_enter();
-		arm_cpuidle_save_irq_context(&context);
+		arm_cpuidle_save_irq_context(&mask);
 		ret = psci_ops.cpu_suspend(state, 0);
-		arm_cpuidle_restore_irq_context(&context);
+		arm_cpuidle_restore_irq_context(&mask);
 		ct_cpuidle_exit();
 	} else {
 		/*

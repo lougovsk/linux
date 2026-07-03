@@ -22,7 +22,7 @@
 #include <linux/syscalls.h>
 #include <linux/pkeys.h>
 
-#include <asm/daifflags.h>
+#include <asm/exception_masks.h>
 #include <asm/debug-monitors.h>
 #include <asm/elf.h>
 #include <asm/exception.h>

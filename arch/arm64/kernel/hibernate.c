@@ -20,7 +20,7 @@
 #include <asm/barrier.h>
 #include <asm/cacheflush.h>
 #include <asm/cputype.h>
-#include <asm/daifflags.h>
+#include <asm/exception_masks.h>
 #include <asm/irqflags.h>
 #include <asm/kexec.h>
 #include <asm/memory.h>
@@ -332,16 +332,16 @@ static void swsusp_mte_restore_tags(void)
 
 int swsusp_arch_suspend(void)
 {
-	int ret = 0;
-	unsigned long flags;
 	struct sleep_stack_data state;
+	struct exception_mask mask;
+	int ret = 0;
 
 	if (cpus_are_stuck_in_kernel()) {
 		pr_err("Can't hibernate: no mechanism to offline secondary CPUs.\n");
 		return -EBUSY;
 	}
 
-	flags = local_daif_save();
+	mask = local_exception_save_and_mask();
 
 	if (__cpu_suspend_enter(&state)) {
 		/* make the crash dump kernel image visible/saveable */
@@ -391,7 +391,7 @@ int swsusp_arch_suspend(void)
 		spectre_v4_enable_mitigation(NULL);
 	}
 
-	local_daif_restore(flags);
+	local_exception_restore(mask);
 
 	return ret;
 }

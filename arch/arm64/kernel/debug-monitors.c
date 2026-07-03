@@ -19,7 +19,7 @@
 
 #include <asm/cpufeature.h>
 #include <asm/cputype.h>
-#include <asm/daifflags.h>
+#include <asm/exception_masks.h>
 #include <asm/debug-monitors.h>
 #include <asm/exception.h>
 #include <asm/kgdb.h>
@@ -40,10 +40,11 @@ u8 debug_monitors_arch(void)
  */
 static void mdscr_write(u64 mdscr)
 {
-	unsigned long flags;
-	flags = local_daif_save();
+	struct exception_mask mask;
+
+	mask = local_exception_save_and_mask();
 	write_sysreg(mdscr, mdscr_el1);
-	local_daif_restore(flags);
+	local_exception_restore(mask);
 }
 NOKPROBE_SYMBOL(mdscr_write);
 

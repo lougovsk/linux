@@ -6,37 +6,30 @@
 
 #ifdef CONFIG_ARM64_PSEUDO_NMI
 #include <asm/arch_gicv3.h>
+#include <asm/exception_masks.h>
 #include <asm/ptrace.h>
 
-struct arm_cpuidle_irq_context {
-	unsigned long pmr;
-	unsigned long daif_bits;
-};
-
-#define arm_cpuidle_save_irq_context(__c)				\
+#define arm_cpuidle_save_irq_context(__m)				\
 	do {								\
-		struct arm_cpuidle_irq_context *c = __c;		\
+		struct exception_mask *m = __m;				\
 		if (system_uses_irq_prio_masking()) {			\
-			c->daif_bits = read_sysreg(daif);		\
-			write_sysreg(c->daif_bits | DAIF_PROCCTX_NOIRQ, \
+			local_exception_save_mask(m);			\
+			write_sysreg(m->daif | DAIF_PROCCTX_NOIRQ,	\
 				     daif);				\
-			c->pmr = gic_read_pmr();			\
 			gic_write_pmr(GIC_PRIO_IRQON | GIC_PRIO_PSR_I_SET); \
 		}							\
 	} while (0)
 
-#define arm_cpuidle_restore_irq_context(__c)				\
+#define arm_cpuidle_restore_irq_context(__m)				\
 	do {								\
-		struct arm_cpuidle_irq_context *c = __c;		\
+		struct exception_mask *m = __m;				\
 		if (system_uses_irq_prio_masking()) {			\
-			gic_write_pmr(c->pmr);				\
-			write_sysreg(c->daif_bits, daif);		\
+			gic_write_pmr(m->pmr);				\
+			write_sysreg(m->daif, daif);			\
 		}							\
 	} while (0)
 #else
-struct arm_cpuidle_irq_context { };
-
-#define arm_cpuidle_save_irq_context(c)		(void)c
-#define arm_cpuidle_restore_irq_context(c)	(void)c
+#define arm_cpuidle_save_irq_context(m)		((void)m)
+#define arm_cpuidle_restore_irq_context(m)	((void)m)
 #endif
 #endif

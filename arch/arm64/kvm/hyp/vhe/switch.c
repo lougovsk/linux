@@ -631,7 +631,7 @@ int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 {
 	int ret;
 
-	local_daif_mask();
+	local_exception_mask();
 
 	/*
 	 * Having IRQs masked via PMR when entering the guest means the GIC
@@ -647,10 +647,10 @@ int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	ret = __kvm_vcpu_run_vhe(vcpu);
 
 	/*
-	 * local_daif_restore() takes care to properly restore PSTATE.DAIF
+	 * local_exception_restore() takes care to properly restore PSTATE.DAIF
 	 * and the GIC PMR if the host is using IRQ priorities.
 	 */
-	local_daif_restore(DAIF_PROCCTX_NOIRQ);
+	local_exception_restore(arm64_make_noirq_mask());
 
 	return ret;
 }
