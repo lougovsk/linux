@@ -141,3 +141,39 @@ Groups:
     ICC_CR0_EL1
     ICC_PCR_EL1
     =======================  ===================================================
+
+  KVM_DEV_ARM_VGIC_GRP_IRS_REGS
+    Attributes:
+      The attr field of kvm_device_attr encodes the offset of the IRS register,
+      relative to the IRS CONFIG_FRAME base address. This is the address that
+      was provided via KVM_VGIC_V5_ADDR_TYPE_IRS when creating VGICv5 in the
+      first place.
+
+      kvm_device_attr.addr points to a __u64 value whatever the width
+      of the addressed register (32/64 bits). 64 bit registers can only
+      be accessed with full length.
+
+      Writes to read-only registers are ignored by the kernel except for:
+
+      - IRS_IDR0 - IRS_IDR2 and IRS_IDR5 - IRS_IDR7: These are sanity checked to
+        ensure that they match a sane config.
+      - IRS_IDR3 and IRS_IDR4: These are RAZ/WI as nested virtualization is not
+        supported.
+
+      For registers without dedicated userspace accessors, getting or setting a
+      register uses the same emulated MMIO handlers as guest reads/writes.
+      Dedicated userspace accessors may instead save or restore migration state
+      without triggering guest-visible side effects. For example, restoring
+      IRS_IST_BASER only restores the emulated register state; any host LPI IST
+      allocation based on the restored IRS_IST_CFGR and IRS_IST_BASER state
+      happens when KVM_DEV_ARM_VGIC_GRP_IST is restored.
+
+  Errors:
+
+    =======  =================================================================
+    -ENXIO   Offset does not correspond to any supported register
+    -EFAULT  Invalid user pointer for attr->addr
+    -EINVAL  Offset is not 32-bit aligned for 32-bit MMIO registers, or not
+             64-bit aligned for 64-bit registers
+    -EBUSY   VGIC is not initialized, or one or more VCPUs are running
+    =======  =================================================================
