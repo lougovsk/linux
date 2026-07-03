@@ -984,7 +984,7 @@ bool vgic_v5_has_pending_ppi(struct kvm_vcpu *vcpu)
  * Detect any PPIs state changes, and propagate the state with KVM's
  * shadow structures.
  */
-void vgic_v5_fold_ppi_state(struct kvm_vcpu *vcpu)
+static void vgic_v5_fold_ppi_state(struct kvm_vcpu *vcpu)
 {
 	struct vgic_v5_cpu_if *cpu_if = &vcpu->arch.vgic_cpu.vgic_v5;
 	unsigned long *activer, *pendr;
@@ -1054,6 +1054,63 @@ void vgic_v5_flush_ppi_state(struct kvm_vcpu *vcpu)
 	 */
 	bitmap_copy(host_data_ptr(vgic_v5_ppi_state)->pendr, pendr,
 		    VGIC_V5_NR_PRIVATE_IRQS);
+}
+
+void vgic_v5_fold_irq_state(struct kvm_vcpu *vcpu)
+{
+	struct vgic_dist *vgic_dist = &vcpu->kvm->arch.vgic;
+	struct vgic_irq *irq;
+
+	/* Sync back the guest PPI state to the KVM shadow state */
+	vgic_v5_fold_ppi_state(vcpu);
+
+	/*
+	 * For SPIs, which are on the global AP list, we synchronise their state
+	 * with the hardware state. If they have been deactivated, immediately
+	 * pop them off the list. The notifier is called without the SPI AP list
+	 * lock held to avoid deadlocks.
+	 */
+retry:
+	raw_spin_lock(&vgic_dist->vgic_v5_spi_ap_list_lock);
+	list_for_each_entry(irq, &vgic_dist->vgic_v5_spi_ap_list_head, ap_list) {
+		bool pending;
+		u32 intid;
+		u64 icsr;
+
+		raw_spin_lock(&irq->irq_lock);
+
+		icsr = kvm_call_hyp_ret(__vgic_v5_vdrcfg, irq->intid);
+
+		irq->active = !!FIELD_GET(ICC_ICSR_EL1_Active, icsr);
+		pending = !!FIELD_GET(ICC_ICSR_EL1_Pending, icsr);
+
+		if (irq->config == VGIC_CONFIG_EDGE)
+			irq->pending_latch = pending;
+
+		if (irq->config == VGIC_CONFIG_LEVEL && !(pending || irq->active))
+			irq->pending_latch = false;
+
+		/* Deactivated? */
+		if (!irq->active && !pending && !irq_is_pending(irq)) {
+			/* Use raw SPI index without type for the GSI */
+			intid = FIELD_GET(GICV5_HWIRQ_ID, irq->intid);
+
+			/* And we're done with this SPI */
+			list_del(&irq->ap_list);
+			irq->vcpu = NULL;
+
+			raw_spin_unlock(&irq->irq_lock);
+			raw_spin_unlock(&vgic_dist->vgic_v5_spi_ap_list_lock);
+
+			kvm_notify_acked_irq(vcpu->kvm, 0, intid);
+			vgic_put_irq(vcpu->kvm, irq);
+
+			goto retry;
+		}
+
+		raw_spin_unlock(&irq->irq_lock);
+	}
+	raw_spin_unlock(&vgic_dist->vgic_v5_spi_ap_list_lock);
 }
 
 void vgic_v5_load(struct kvm_vcpu *vcpu)
