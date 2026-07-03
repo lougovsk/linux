@@ -757,6 +757,10 @@ static inline void debug_switch_state(void)
 		WARN_ONCE(daif_actual != daif_expected,
 			  "Unexpected DAIF value: 0x%lx (expected 0x%lx)\n",
 			  daif_actual, daif_expected);
+
+		if (system_uses_nmi())
+			WARN_ONCE(read_sysreg_s(SYS_ALLINT) & ALLINT_ALLINT,
+				  "Unexpected ALLINT set\n");
 	}
 }
 
