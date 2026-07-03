@@ -177,3 +177,58 @@ Groups:
              64-bit aligned for 64-bit registers
     -EBUSY   VGIC is not initialized, or one or more VCPUs are running
     =======  =================================================================
+
+  KVM_DEV_ARM_VGIC_GRP_IST
+    Attributes:
+      This interface is used to either save the state of the IRS's Interrupt
+      State Tables (ISTs), or to restore them. A get operation saves IST state,
+      and a set operation restores IST state. kvm_device_attr.attr is reserved
+      and must be zero.
+
+      The VGIC must be initialized before using this interface. Restore must be
+      performed before the VM has run. For restore, userspace must have already
+      restored the IRS state and guest memory needed to describe and back any
+      guest LPI IST.
+
+      Saving first asks the IRS to save and quiesce the VM so that interrupt
+      state has been written back to the ISTs. KVM checks that the VM remains
+      quiesced while copying out the SPI and LPI IST state.
+
+      The LPI IST is written to or read from guest-allocated memory. KVM assumes
+      that the guest has provisioned a linear virtual IST through IRS_IST_CFGR
+      and IRS_IST_BASER, and uses that guest memory as the LPI IST migration
+      storage. If the guest has not enabled an LPI IST, there is no LPI IST
+      state to save or restore.
+
+      The SPI IST has no guest-owned backing memory, so userspace must provide a
+      buffer through kvm_device_attr.addr for both get and set operations. The
+      buffer contains one little-endian 32-bit IST entry per exposed SPI, in SPI
+      number order. Its size is:
+
+        nr_spis * sizeof(__u32)
+
+      where nr_spis is the value returned by KVM_DEV_ARM_VGIC_GRP_NR_IRQS for
+      the VGICv5 device. For VGICv5 this value is the number of SPIs, not the
+      total number of interrupts. Since VGICv5 currently exposes at least 32
+      SPIs, kvm_device_attr.addr must be non-zero.
+
+    Errors:
+
+      ===========  ============================================================
+      -EBUSY       One or more VCPUs are running, the VGIC is not initialized,
+                   restore was requested after the VM has run, an LPI IST
+                   already exists, or the save operation completed but the VM
+                   did not remain quiesced
+      -EINVAL      A userspace SPI IST buffer was not supplied when one is
+                   required, or an internal VM table operation rejected the VM
+                   state
+      -ENOENT      A userspace SPI IST buffer was supplied, but there is no SPI
+                   IST to serialise/unserialise
+      -EFAULT      Invalid user pointer for attr->addr, or the guest memory
+                   backing the LPI IST could not be accessed
+      -ENXIO       Required per-VM VGICv5/IST backing state is missing or
+                   inconsistent
+      -ENOMEM      Restoring IST state failed while allocating the host LPI IST
+                   or tracking pending interrupts
+      -ETIMEDOUT   An IRS save/VM operation timed out
+      ===========  ============================================================
