@@ -419,6 +419,12 @@ Before jumping into the kernel, the following conditions must be met:
 
     - HCR_EL2.ATA (bit 56) must be initialised to 0b1.
 
+  For CPUs with Non-maskable Interrupts (FEAT_NMI):
+
+  - If the kernel is entered at EL1 and EL2 is present:
+
+    - HCRX_EL2.TALLINT must be initialised to 0b0.
+
   For CPUs with the Scalable Matrix Extension version 2 (FEAT_SME2):
 
   - If EL3 is present:
