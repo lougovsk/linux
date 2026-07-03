@@ -10,6 +10,7 @@
 #include <asm/arch_gicv3.h>
 #include <asm/barrier.h>
 #include <asm/cpufeature.h>
+#include <asm/nmi.h>
 #include <asm/ptrace.h>
 
 /*
@@ -46,7 +47,10 @@ static inline struct exception_mask arm64_make_errctx_mask(void)
 	if (system_uses_irq_prio_masking())
 		mask.pmr = GIC_PRIO_IRQON | GIC_PRIO_PSR_I_SET;
 
-	mask.allint = 0;
+	if (system_uses_nmi())
+		mask.allint = ALLINT_ALLINT;
+	else
+		mask.allint = 0;
 
 	return mask;
 }
@@ -78,6 +82,9 @@ static inline void local_exception_mask(void)
 	if (system_uses_irq_prio_masking())
 		gic_write_pmr(GIC_PRIO_IRQON | GIC_PRIO_PSR_I_SET);
 
+	if (system_uses_nmi())
+		_allint_set();
+
 	trace_hardirqs_off();
 }
 
@@ -87,7 +94,8 @@ static inline void local_exception_save_mask(struct exception_mask *mask)
 	if (system_uses_irq_prio_masking())
 		mask->pmr = gic_read_pmr();
 
-	mask->allint = 0;
+	if (system_uses_nmi())
+		mask->allint = read_sysreg_s(SYS_ALLINT);
 }
 
 static inline struct exception_mask local_exception_save_and_mask(void)
@@ -118,6 +126,9 @@ static inline void local_exception_restore(const struct exception_mask mask)
 		pmr_sync();
 	}
 
+	if (system_uses_nmi())
+		write_sysreg_s(mask.allint, SYS_ALLINT);
+
 	write_sysreg(mask.daif, daif);
 
 	if (irq_disabled)
@@ -137,6 +148,13 @@ static inline void local_exception_inherit(struct pt_regs *regs)
 		gic_write_pmr(regs->pmr);
 
 	write_sysreg(regs->pstate & DAIF_MASK, daif);
+
+	if (system_uses_nmi()) {
+		if (regs->pstate & ALLINT_ALLINT)
+			_allint_set();
+		else
+			_allint_clear();
+	}
 }
 
 /*

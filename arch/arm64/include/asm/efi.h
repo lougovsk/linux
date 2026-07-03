@@ -48,18 +48,28 @@ void arch_efi_call_virt_teardown(void);
 	(efi_rt_stack_top != NULL &&					\
 	 on_task_stack(current, READ_ONCE(efi_rt_stack_top[-1]), 1))
 
-#define ARCH_EFI_IRQ_FLAGS_MASK (DAIF_MASK)
+#define ARCH_EFI_IRQ_FLAGS_MASK		\
+	(system_uses_nmi() ? (DAIF_MASK | ALLINT_ALLINT) : (DAIF_MASK))
 
 /*
  * Even when Linux uses IRQ priorities for IRQ disabling, EFI does not.
  * And EFI shouldn't really play around with priority masking as it is not aware
  * which priorities the OS has assigned to its interrupts.
  */
-#define arch_efi_save_flags(state_flags)		\
-	((void)((state_flags) = read_sysreg(daif)))
+#define arch_efi_save_flags(state_flags)			\
+	do {							\
+		((void)((state_flags) = read_sysreg(daif)));	\
+		if (system_uses_nmi())				\
+			(state_flags) |= (read_sysreg_s(SYS_ALLINT) & ALLINT_ALLINT);	\
+	} while (0)
 
-#define arch_efi_restore_flags(state_flags)	write_sysreg(state_flags, daif)
-
+#define arch_efi_restore_flags(state_flags)			\
+	do {							\
+		u64 __flags = (state_flags);			\
+		write_sysreg(__flags & DAIF_MASK, daif);	\
+		if (system_uses_nmi())				\
+			write_sysreg_s(__flags & ALLINT_ALLINT, SYS_ALLINT);	\
+	} while (0)
 
 /* arch specific definitions used by the stub code */
 

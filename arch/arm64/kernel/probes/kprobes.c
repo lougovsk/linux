@@ -197,12 +197,19 @@ static void __kprobes kprobes_save_local_irqflag(struct kprobe_ctlblk *kcb,
 {
 	kcb->saved_irqflag = regs->pstate & DAIF_MASK;
 	regs->pstate |= DAIF_MASK;
+
+	if (system_uses_nmi())
+		regs->pstate |= ALLINT_ALLINT;
 }
 
 static void __kprobes kprobes_restore_local_irqflag(struct kprobe_ctlblk *kcb,
 						struct pt_regs *regs)
 {
 	regs->pstate &= ~DAIF_MASK;
+
+	if (system_uses_nmi())
+		regs->pstate &= ~ALLINT_ALLINT;
+
 	regs->pstate |= kcb->saved_irqflag;
 }
 

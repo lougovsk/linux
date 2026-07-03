@@ -39,6 +39,11 @@
  */
 	.macro save_and_disable_daif, flags
 	mrs	\flags, daif
+#ifdef CONFIG_ARM64_NMI
+alternative_if ARM64_HAS_NMI
+	msr_s	SYS_ALLINT_SET, xzr
+alternative_else_nop_endif
+#endif
 	msr	daifset, #0xf
 	.endm
 
@@ -49,6 +54,14 @@
 
 	.macro	restore_irq, flags
 	msr	daif, \flags
+#ifdef CONFIG_ARM64_NMI
+alternative_if ARM64_HAS_NMI
+	/* If async exceptions are unmasked we can take NMIs */
+	tbnz	\flags, #8, 2004f
+	msr_s	SYS_ALLINT_CLR, xzr
+2004:
+alternative_else_nop_endif
+#endif
 	.endm
 
 	.macro	disable_step_tsk, flgs, tmp

@@ -15,6 +15,7 @@
 #include <linux/stringify.h>
 #include <asm/barrier.h>
 #include <asm/cacheflush.h>
+#include <asm/nmi.h>
 
 #define read_gicreg(r)			read_sysreg_s(SYS_ ## r)
 #define write_gicreg(v, r)		write_sysreg_s(v, SYS_ ## r)
@@ -180,7 +181,11 @@ static inline void gic_pmr_mask_irqs(void)
 
 static inline void gic_arch_enable_irqs(void)
 {
-	asm volatile ("msr daifclr, #3" : : : "memory");
+	if (gic_prio_masking_enabled())
+		asm volatile ("msr daifclr, #3" : : : "memory");
+
+	if (system_uses_nmi())
+		_allint_clear();
 }
 
 static inline bool gic_has_relaxed_pmr_sync(void)
