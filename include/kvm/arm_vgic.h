@@ -574,6 +574,20 @@ struct vgic_dist {
 	 * GICv5 IRS data. Dynamically allocated due to the size.
 	 */
 	struct vgic_v5_irs	*vgic_v5_irs_data;
+
+	/*
+	 * The GICv5 SPI AP list is global to the VM. This spinlock ensures that
+	 * we don't do anything untoward!
+	 */
+	raw_spinlock_t		vgic_v5_spi_ap_list_lock;
+
+	/*
+	 * List of global (non-private) IRQs that must be tracked because they
+	 * are either Active or Pending (hence the name; AP list). This list
+	 * will only ever contain SPIs. All private IRQs must go into a specific
+	 * vcpu's AP list.
+	 */
+	struct list_head	vgic_v5_spi_ap_list_head;
 };
 
 struct vgic_v2_cpu_if {

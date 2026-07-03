@@ -633,6 +633,9 @@ int kvm_vgic_v5_irs_init(struct kvm *kvm, unsigned int nr_spis)
 	u64 mmfr0;
 	int ret, i;
 
+	INIT_LIST_HEAD(&dist->vgic_v5_spi_ap_list_head);
+	raw_spin_lock_init(&dist->vgic_v5_spi_ap_list_lock);
+
 	/*
 	 * We (KVM) allocate an Interrupt State Table (IST) for SPIs. The
 	 * hardware mandates that lower 6 bits of the address are 0. Each ISTE
