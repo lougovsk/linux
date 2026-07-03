@@ -486,6 +486,8 @@ asmlinkage void noinstr el1h_64_sync_handler(struct pt_regs *regs)
 	default:
 		__panic_unhandled(regs, "64-bit el1h sync", esr);
 	}
+
+	write_sysreg(DAIF_MASK, daif);
 }
 
 static __always_inline void __el1_pnmi(struct pt_regs *regs,
@@ -520,6 +522,8 @@ static void noinstr el1_interrupt(struct pt_regs *regs,
 		__el1_pnmi(regs, handler);
 	else
 		__el1_irq(regs, handler);
+
+	write_sysreg(DAIF_MASK, daif);
 }
 
 asmlinkage void noinstr el1h_64_irq_handler(struct pt_regs *regs)
@@ -541,6 +545,7 @@ asmlinkage void noinstr el1h_64_error_handler(struct pt_regs *regs)
 	state = irqentry_nmi_enter(regs);
 	do_serror(regs, esr);
 	irqentry_nmi_exit(regs, state);
+	write_sysreg(DAIF_MASK, daif);
 }
 
 static void noinstr el0_da(struct pt_regs *regs, unsigned long esr)
