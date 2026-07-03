@@ -263,7 +263,7 @@ asmlinkage notrace void secondary_start_kernel(void)
 	 * as the root irqchip has already been detected and initialized we can
 	 * unmask IRQ and FIQ at the same time.
 	 */
-	local_exception_restore(arm64_make_procctx_mask());
+	local_exception_restore_procctx();
 
 	/*
 	 * OK, it's off to the idle thread for us

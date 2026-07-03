@@ -407,7 +407,7 @@ int apei_claim_sea(struct pt_regs *regs)
 	 * SEA can interrupt SError, mask it and describe this as an NMI so
 	 * that APEI defers the handling.
 	 */
-	local_exception_restore(arm64_make_errctx_mask());
+	local_exception_restore_errctx();
 	nmi_enter();
 	err = ghes_notify_sea();
 	nmi_exit();
@@ -418,7 +418,7 @@ int apei_claim_sea(struct pt_regs *regs)
 	 */
 	if (!err) {
 		if (return_to_irqs_enabled) {
-			local_exception_restore(arm64_make_noirq_mask());
+			local_exception_restore_noirq();
 			__irq_enter();
 			irq_work_run();
 			__irq_exit();

@@ -650,7 +650,7 @@ int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	 * local_exception_restore() takes care to properly restore PSTATE.DAIF
 	 * and the GIC PMR if the host is using IRQ priorities.
 	 */
-	local_exception_restore(arm64_make_noirq_mask());
+	local_exception_restore_noirq();
 
 	return ret;
 }

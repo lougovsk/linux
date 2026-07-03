@@ -196,4 +196,19 @@ static __always_inline void exception_exit_restore_mask(struct exception_mask ma
 {
 	write_sysreg(mask.daif, daif);
 }
+
+static inline void local_exception_restore_noirq(void)
+{
+	local_exception_restore(arm64_make_noirq_mask());
+}
+
+static inline void local_exception_restore_errctx(void)
+{
+	local_exception_restore(arm64_make_errctx_mask());
+}
+
+static inline void local_exception_restore_procctx(void)
+{
+	local_exception_restore(arm64_make_procctx_mask());
+}
 #endif /* __ASM_EXCEPTION_MASKS_H */

@@ -130,6 +130,6 @@ void __init init_IRQ(void)
 		 * the PMR/PSR pair to a consistent state.
 		 */
 		WARN_ON(read_sysreg(daif) & PSR_A_BIT);
-		local_exception_restore(arm64_make_noirq_mask());
+		local_exception_restore_noirq();
 	}
 }

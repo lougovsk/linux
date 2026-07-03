@@ -311,7 +311,7 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 	 * IRQ and FIQ will be unmasked after the root irqchip has been
 	 * detected and initialized.
 	 */
-	local_exception_restore(arm64_make_noirq_mask());
+	local_exception_restore_noirq();
 
 	/*
 	 * TTBR0 is only used for the identity mapping at this stage. Make it
