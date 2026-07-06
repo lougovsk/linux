@@ -122,6 +122,8 @@ static bool vgic_present, kvm_arm_initialised;
 
 static DEFINE_PER_CPU(unsigned char, kvm_hyp_initialized);
 
+static struct shrinker *pkvm_shrinker;
+
 bool is_kvm_arm_initialised(void)
 {
 	return kvm_arm_initialised;
@@ -2526,8 +2528,8 @@ static void __init teardown_hyp_mode(void)
 		}
 
 		free_pages(kvm_nvhe_sym(kvm_arm_hyp_percpu_base)[cpu], nvhe_percpu_order());
-
 	}
+	shrinker_free(pkvm_shrinker);
 }
 
 static int __init do_pkvm_init(u32 hyp_va_bits)
@@ -2713,6 +2715,18 @@ static void pkvm_hyp_init_ptrauth(void)
 	}
 }
 
+static unsigned long
+pkvm_shrinker_count(struct shrinker *shrink, struct shrink_control *sc)
+{
+	return pkvm_hyp_reclaimable(PKVM_TOPUP_HYP_ALLOC) ?: SHRINK_EMPTY;
+}
+
+static unsigned long
+pkvm_shrinker_scan(struct shrinker *shrink, struct shrink_control *sc)
+{
+	return pkvm_hyp_reclaim(PKVM_TOPUP_HYP_ALLOC, sc->nr_to_scan);
+}
+
 /* Inits Hyp-mode on all online CPUs */
 static int __init init_hyp_mode(void)
 {
@@ -2883,6 +2897,16 @@ static int __init init_hyp_mode(void)
 			kvm_err("Failed to init hyp memory protection\n");
 			goto out_err;
 		}
+
+		pkvm_shrinker = shrinker_alloc(0, "pkvm");
+		if (pkvm_shrinker) {
+			pkvm_shrinker->count_objects = pkvm_shrinker_count;
+			pkvm_shrinker->scan_objects = pkvm_shrinker_scan;
+			shrinker_register(pkvm_shrinker);
+		} else {
+			kvm_err("Failed to register shrinker for pKVM\n");
+		}
+
 	}
 
 	return 0;
