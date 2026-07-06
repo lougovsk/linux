@@ -21,6 +21,9 @@ enum pkvm_topup_id {
 	PKVM_TOPUP_HYP_ALLOC,
 };
 
+unsigned long pkvm_hyp_reclaim(enum pkvm_topup_id id, unsigned long target);
+unsigned long pkvm_hyp_reclaimable(enum pkvm_topup_id id);
+
 int pkvm_init_host_vm(struct kvm *kvm, unsigned long type);
 int pkvm_create_hyp_vm(struct kvm *kvm);
 bool pkvm_hyp_vm_is_created(struct kvm *kvm);
