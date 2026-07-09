@@ -124,7 +124,8 @@ static struct vgic_irq *vgic_add_lpi(struct kvm *kvm, u32 intid,
 		 * holds before freeing it, as otherwise someone else could still
 		 * hold a pointer to the evicted struct.
 		 */
-		oldirq = __xa_store(&dist->lpi_xa, intid, irq, 0);
+		oldirq = __xa_store(&dist->lpi_xa, intid, irq,
+				    GFP_NOWAIT | __GFP_ACCOUNT);
 		ret = xa_err(oldirq);
 		if (!ret && oldirq &&
 		    !WARN_ON_ONCE(refcount_read(&oldirq->refcount) ||
